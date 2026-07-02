@@ -15,6 +15,7 @@ import { SsgModule } from './ssg/ssg.module';
 import { MediaModule } from './media/media.module';
 import { TemplatesModule } from './templates/templates.module';
 import { BuildModule } from './build/build.module';
+import { ParseModule } from './parse/parse.module';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -38,6 +39,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     MediaModule,
     TemplatesModule,
     BuildModule,
+    ParseModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
