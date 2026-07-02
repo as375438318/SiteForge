@@ -108,9 +108,13 @@ export default function Editor() {
 
   const renderPreview = useCallback(async () => {
     try {
+      const token = localStorage.getItem('sf-token')
       const res = await fetch('/api/ssg/preview-page', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ site: buildSite(), page: buildPage() }),
       })
       if (!res.ok) {
