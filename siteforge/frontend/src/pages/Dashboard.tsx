@@ -1,3 +1,4 @@
+import { useEffect, useState, type ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import {
   TrendingUp, FileText, Bot, Inbox, Wand2, LayoutGrid, FilePlus2,
@@ -6,8 +7,32 @@ import {
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, StatCard, Badge, Button } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { apiClient, ApiError } from '@/lib/api'
 
-const stats = [
+interface DashboardStats {
+  svi?: number
+  sviDelta?: string
+  indexedPages?: number
+  indexedPagesDelta?: string
+  citationScore?: number
+  citationScoreDelta?: string
+  leads7d?: number
+  leads7dDelta?: string
+}
+interface DashboardActivity {
+  icon?: string
+  color?: string
+  title: string
+  desc: string
+  time: string
+}
+interface DashboardData {
+  stats?: DashboardStats
+  activities?: DashboardActivity[]
+  todos?: { label: string; count: number; icon: string; color: string; to: string }[]
+}
+
+const defaultStats = [
   { label: 'SVI 指数', value: 72, delta: '5.2', deltaType: 'up' as const },
   { label: '收录页面', value: 87, delta: '4', deltaType: 'up' as const },
   { label: '可引用性均分', value: 64, delta: '2.1', deltaType: 'up' as const },
@@ -38,13 +63,13 @@ const entries = [
   },
 ]
 
-const todos = [
+const defaultTodos = [
   { label: 'SEO 未通过项', count: 3, icon: Search, color: 'text-warning', to: '/seo/health' },
   { label: '未处理线索', count: 5, icon: Inbox, color: 'text-destructive', to: '/leads' },
   { label: '未配置 LLM API', count: 1, icon: Settings, color: 'text-blue-500', to: '/system/llm' },
 ]
 
-const activities = [
+const defaultActivities = [
   { icon: Rocket, color: 'text-success', title: '发布了静态站点', desc: '生成 87 个页面，已部署至 CDN', time: '10 分钟前' },
   { icon: FileText, color: 'text-blue-500', title: '发布了文章《2024 SaaS 趋势》', desc: 'GEO 评分 78，可引用性良好', time: '2 小时前' },
   { icon: Bot, color: 'text-purple-500', title: '生成了 llms.txt', desc: '6 个页面已写入 AI 引用档案', time: '今天 09:12' },
@@ -52,13 +77,67 @@ const activities = [
   { icon: FileCode, color: 'text-muted-foreground', title: '新增页面 /pricing', desc: '已配置 SEO TDK 与结构化数据', time: '昨天 14:05' },
 ]
 
+const activityIconMap: Record<string, ComponentType<{ className?: string }>> = {
+  Rocket, FileText, Bot, MessageSquare, FileCode,
+}
+
+type ActivityItem = {
+  icon: ComponentType<{ className?: string }>
+  color: string
+  title: string
+  desc: string
+  time: string
+}
+
 export default function Dashboard() {
+  const [stats, setStats] = useState(defaultStats)
+  const [todos, setTodos] = useState(defaultTodos)
+  const [activities, setActivities] = useState<ActivityItem[]>(defaultActivities)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await apiClient.get<DashboardData>('/dashboard')
+        if (cancelled) return
+        if (data?.stats) {
+          setStats([
+            { label: 'SVI 指数', value: data.stats.svi ?? defaultStats[0].value, delta: data.stats.sviDelta ?? defaultStats[0].delta, deltaType: 'up' },
+            { label: '收录页面', value: data.stats.indexedPages ?? defaultStats[1].value, delta: data.stats.indexedPagesDelta ?? defaultStats[1].delta, deltaType: 'up' },
+            { label: '可引用性均分', value: data.stats.citationScore ?? defaultStats[2].value, delta: data.stats.citationScoreDelta ?? defaultStats[2].delta, deltaType: 'up' },
+            { label: '近 7 天线索', value: data.stats.leads7d ?? defaultStats[3].value, delta: data.stats.leads7dDelta ?? defaultStats[3].delta, deltaType: 'up' },
+          ])
+        }
+        if (data?.activities?.length) {
+          setActivities(
+            data.activities.map((a) => ({
+              icon: (a.icon && activityIconMap[a.icon]) || FileText,
+              color: a.color || 'text-muted-foreground',
+              title: a.title,
+              desc: a.desc,
+              time: a.time,
+            })),
+          )
+        }
+      } catch (e) {
+        // 后端未就绪或无数据，保留 mock 兜底
+        if (e instanceof ApiError && e.status === 401) {
+          // 鉴权失败，跳登录
+          window.location.href = '/login'
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div className="space-y-6">
       {/* Page Title */}
       <div>
         <h1 className="text-2xl font-bold">工作台</h1>
-        <p className="text-sm text-muted-foreground mt-1">早上好，admin。今日有 5 条新线索待跟进。</p>
+        <p className="text-sm text-muted-foreground mt-1">早上好，admin。今日有 {todos[1]?.count ?? 5} 条新线索待跟进。</p>
       </div>
 
       {/* Stats */}

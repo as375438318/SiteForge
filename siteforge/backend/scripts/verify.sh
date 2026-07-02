@@ -72,10 +72,10 @@ echo ""
 echo -e "${BLUE}== 1. 环境变量 ==${NC}"
 
 [[ -n "${DOMAIN:-}" ]] && check "DOMAIN 配置" pass || check "DOMAIN 配置" fail "未配置 DOMAIN"
-[[ -n "${POSTGRES_PASSWORD:-}" && "${POSTGRES_PASSWORD}" != "change-me-to-a-strong-password" ]] \
+[[ -n "${POSTGRES_PASSWORD:-}" && "${POSTGRES_PASSWORD}" != "siteforge123" ]] \
     && check "POSTGRES_PASSWORD 已修改" pass \
     || check "POSTGRES_PASSWORD" warn "使用默认值，请修改"
-[[ -n "${JWT_SECRET:-}" && "${JWT_SECRET}" != "please-generate-a-strong-secret-with-openssl-rand-base64-64" ]] \
+[[ -n "${JWT_SECRET:-}" && "${JWT_SECRET}" != "change-this-in-production" ]] \
     && check "JWT_SECRET 已修改" pass \
     || check "JWT_SECRET" warn "使用默认值，请修改"
 
@@ -144,7 +144,7 @@ fi
 echo ""
 echo -e "${BLUE}== 5. Redis ==${NC}"
 
-docker exec siteforge-redis redis-cli -a "${REDIS_PASSWORD:-change-me-redis-password}" \
+docker exec siteforge-redis redis-cli -a "${REDIS_PASSWORD:-siteforge-redis}" \
     ping >/dev/null 2>&1 \
     && check "Redis 连通" pass \
     || check "Redis 连通" fail "无法连接 Redis"

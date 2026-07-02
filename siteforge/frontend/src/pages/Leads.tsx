@@ -1,14 +1,29 @@
-import { Button, Table, Th, Td, Badge, Select, Input, Card } from '@/components/ui'
+import { useEffect, useState } from 'react'
+import { Button, Table, Th, Td, Badge, Select, EmptyState } from '@/components/ui'
 import { toast } from '@/stores/toast'
-import { Download, Shield } from 'lucide-react'
+import { Download, Shield, Inbox } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { apiClient, ApiError } from '@/lib/api'
 
-const leads = [
+interface Lead {
+  id?: string
+  time: string
+  name: string
+  phone: string
+  source: string
+  form: string
+  status: string
+}
+interface LeadsResponse {
+  items?: Lead[]
+}
+
+const fallbackLeads: Lead[] = [
   { time: '2025-07-01 14:32', name: '王先生', phone: '138****8888', source: '/contact', form: '在线咨询', status: '未处理' },
   { time: '2025-07-01 10:15', name: '李女士', phone: '159****6666', source: '/products', form: '产品咨询', status: '已联系' },
   { time: '2025-06-30 16:48', name: '张总', phone: '186****1234', source: '/contact', form: '在线咨询', status: '已成交' },
   { time: '2025-06-30 09:22', name: '陈先生', phone: '137****5555', source: '弹窗', form: '在线咨询', status: '未处理' },
-  { time: '2025-06-29 15:30', name: '刘女士', phone: '135****9999', source: '/contact', form: '预约 demo', status: '已联系' },
+  { time: '2025-06-29 15:30', name: '刘女士', phone: '135****9999', source: '/contact', form: '在线咨询', status: '已联系' },
   { time: '2025-06-28 11:10', name: '赵先生', phone: '188****0000', source: '/products', form: '产品咨询', status: '已成交' },
   { time: '2025-06-28 08:45', name: '孙女士', phone: '133****3333', source: '/contact', form: '在线咨询', status: '无效' },
   { time: '2025-06-27 17:20', name: '周总', phone: '131****7777', source: '浮动按钮', form: '在线咨询', status: '未处理' },
@@ -18,13 +33,52 @@ const statusMap: Record<string, 'info' | 'warning' | 'success' | 'default'> = {
   '未处理': 'info', '已联系': 'warning', '已成交': 'success', '无效': 'default',
 }
 
+const DEFAULT_SITE_ID = 'default'
+
 export default function Leads() {
   const navigate = useNavigate()
+  const [leads, setLeads] = useState<Lead[]>(fallbackLeads)
+  const [loading, setLoading] = useState(false)
+  const [usedFallback, setUsedFallback] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    ;(async () => {
+      try {
+        const data = await apiClient.get<LeadsResponse | Lead[]>(`/leads/${DEFAULT_SITE_ID}`)
+        if (cancelled) return
+        const list = Array.isArray(data) ? data : (data as LeadsResponse)?.items
+        if (list) {
+          setLeads(list)
+          setUsedFallback(false)
+        }
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+        setLeads(fallbackLeads)
+        setUsedFallback(true)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-2xl font-bold">线索管理</h1><p className="text-sm text-muted-foreground">所有线索仅存储在本地服务器</p></div>
-        <Button variant="secondary" onClick={() => toast.success('线索已导出为CSV')}><Download className="w-4 h-4" /> 导出CSV</Button>
+        <div>
+          <h1 className="text-2xl font-bold">线索管理</h1>
+          <p className="text-sm text-muted-foreground">所有线索仅存储在本地服务器</p>
+        </div>
+        <Button variant="secondary" onClick={() => toast.success('线索已导出为CSV')}>
+          <Download className="w-4 h-4" /> 导出CSV
+        </Button>
       </div>
 
       <div className="flex gap-3 mb-4">
@@ -36,22 +90,42 @@ export default function Leads() {
         <Badge variant="success"><Shield className="w-3 h-3" /> 线索仅存本地</Badge>
       </div>
 
-      <Table>
-        <thead><tr><Th>提交时间</Th><Th>姓名</Th><Th>联系方式</Th><Th>来源页面</Th><Th>表单</Th><Th>状态</Th><Th>操作</Th></tr></thead>
-        <tbody>
-          {leads.map((lead, i) => (
-            <tr key={i} className="hover:bg-muted/50">
-              <Td className="text-muted-foreground whitespace-nowrap">{lead.time}</Td>
-              <Td className="font-medium">{lead.name}</Td>
-              <Td className="text-muted-foreground">{lead.phone}</Td>
-              <Td className="text-muted-foreground">{lead.source}</Td>
-              <Td><Badge>{lead.form}</Badge></Td>
-              <Td><Badge variant={statusMap[lead.status]}>{lead.status}</Badge></Td>
-              <Td><Button variant="link" size="sm" onClick={() => navigate('/leads/detail')}>查看</Button></Td>
+      {usedFallback && (
+        <div className="mb-3 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+          后端暂未返回数据，当前展示示例线索。
+        </div>
+      )}
+
+      {loading ? (
+        <div className="p-8 text-center text-muted-foreground">加载中...</div>
+      ) : leads.length === 0 ? (
+        <EmptyState
+          icon={<Inbox className="w-10 h-10" />}
+          title="暂无线索"
+          description="当访客提交表单后，线索将显示在此处"
+        />
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>提交时间</Th><Th>姓名</Th><Th>联系方式</Th><Th>来源页面</Th><Th>表单</Th><Th>状态</Th><Th>操作</Th>
             </tr>
-          ))}
-        </tbody>
-      </Table>
+          </thead>
+          <tbody>
+            {leads.map((lead, i) => (
+              <tr key={lead.id ?? i} className="hover:bg-muted/50">
+                <Td className="text-muted-foreground whitespace-nowrap">{lead.time}</Td>
+                <Td className="font-medium">{lead.name}</Td>
+                <Td className="text-muted-foreground">{lead.phone}</Td>
+                <Td className="text-muted-foreground">{lead.source}</Td>
+                <Td><Badge>{lead.form}</Badge></Td>
+                <Td><Badge variant={statusMap[lead.status] || 'default'}>{lead.status}</Badge></Td>
+                <Td><Button variant="link" size="sm" onClick={() => navigate('/leads/detail')}>查看</Button></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
     </div>
   )
 }

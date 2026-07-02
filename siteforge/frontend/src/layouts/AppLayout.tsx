@@ -3,10 +3,11 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Wand2, LayoutGrid, MousePointerClick, FileText, FileEdit,
   MessageSquare, Inbox, Search, Bot, FileCode, Settings, Server, KeyRound,
-  DatabaseBackup, Cpu, Sun, Moon, Bell, ChevronLeft, ChevronRight, Globe, Rocket
+  DatabaseBackup, Cpu, Sun, Moon, Bell, ChevronLeft, ChevronRight, Globe, Rocket, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useThemeStore } from '@/stores/theme'
+import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/stores/toast'
 import { Button } from '@/components/ui'
 
@@ -89,9 +90,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { theme, toggle } = useThemeStore()
   const location = useLocation()
   const navigate = useNavigate()
+  const logout = useAuthStore((s) => s.logout)
+  const user = useAuthStore((s) => s.user)
 
   const currentLabel = routeLabels[location.pathname] || '工作台'
   const isEditor = location.pathname === '/editor'
+
+  const handleLogout = () => {
+    logout()
+    toast.info('已退出登录')
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -143,14 +152,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Footer */}
-        <div className="p-3 border-t border-border flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">A</div>
-          {!collapsed && !isEditor && (
-            <div className="flex-1 text-xs">
-              <div className="font-medium">admin</div>
-              <div className="text-muted-foreground">智云科技 · 管理员</div>
+        <div className="p-3 border-t border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+              {(user?.username || 'admin').slice(0, 1).toUpperCase()}
             </div>
-          )}
+            {!collapsed && !isEditor && (
+              <div className="flex-1 text-xs min-w-0">
+                <div className="font-medium truncate">{user?.username || 'admin'}</div>
+                <div className="text-muted-foreground">智云科技 · 管理员</div>
+              </div>
+            )}
+            {!collapsed && !isEditor && (
+              <button
+                onClick={handleLogout}
+                title="退出登录"
+                className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+            {(collapsed || isEditor) && (
+              <button
+                onClick={handleLogout}
+                title="退出登录"
+                className="w-8 h-8 mx-auto flex items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 

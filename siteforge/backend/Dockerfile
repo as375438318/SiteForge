@@ -1,14 +1,15 @@
 # SiteForge Backend Dockerfile
-# 基于 Node 22 LTS 镜像
+# 基于 Node 22 LTS 镜像（多阶段构建）
 
 # ====== Stage 1: 依赖安装与构建 ======
-FROM node:22-bookworm-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
 # 安装构建 Prisma 所需的 OpenSSL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 先复制 package*.json 与 prisma schema 以利用 Docker 缓存层
@@ -32,11 +33,11 @@ RUN npm run build
 RUN npm prune --production
 
 # ====== Stage 2: 运行时镜像 ======
-FROM node:22-bookworm-slim AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
-# 安装运行时必需的 OpenSSL（Prisma 客户端依赖）
+# 安装运行时必需的 OpenSSL 与 tini（Prisma 客户端依赖 + 进程信号处理）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     tini \
