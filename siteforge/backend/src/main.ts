@@ -15,6 +15,9 @@ async function bootstrap() {
 
   app.enableCors({ origin: '*', credentials: true });
 
+  // 全局路由前缀
+  app.setGlobalPrefix('api');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

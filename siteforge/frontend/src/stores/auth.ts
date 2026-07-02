@@ -10,6 +10,7 @@ interface AuthState {
 }
 
 interface LoginResponse {
+  accessToken?: string
   access_token?: string
   token?: string
   username?: string
@@ -29,7 +30,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       })
       if (!res.ok) return false
       const data: LoginResponse = await res.json()
-      const token = data.access_token || data.token
+      const token = data.accessToken || data.access_token || data.token
       if (!token) return false
       localStorage.setItem('sf-token', token)
       const user = data.user || { username: data.username || username }
