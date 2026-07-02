@@ -1,0 +1,61 @@
+---
+/**
+ * Footer 区块 - 页脚
+ * 语义化：<footer> + <nav>（快速导航）
+ */
+import type { FooterProps } from '@shared/block-schema'
+
+interface Props extends FooterProps {}
+const {
+  companyName,
+  description,
+  phone,
+  email,
+  address,
+  icp,
+  navLinks = [],
+  socialLinks = [],
+} = Astro.props
+
+const year = new Date().getFullYear()
+const defaultNav = [
+  { label: '首页', url: '/' },
+  { label: '产品', url: '/products' },
+  { label: '关于', url: '/about' },
+  { label: '联系', url: '/contact' },
+]
+const nav = navLinks.length > 0 ? navLinks : defaultNav
+---
+<footer class="block-footer">
+  <div class="footer-content">
+    <div class="footer-col">
+      <h4>{companyName ?? '企业名称'}</h4>
+      {description && <p>{description}</p>}
+      {socialLinks.length > 0 && (
+        <div class="footer-social">
+          {socialLinks.map((s) => (
+            <a href={s.url} rel="me" title={s.platform}>{s.platform}</a>
+          ))}
+        </div>
+      )}
+    </div>
+    <div class="footer-col">
+      <h4>联系方式</h4>
+      {phone && <p><a href={`tel:${phone}`}>{phone}</a></p>}
+      {email && <p><a href={`mailto:${email}`}>{email}</a></p>}
+      {address && <p>{address}</p>}
+    </div>
+    <nav class="footer-col" aria-label="快速导航">
+      <h4>快速导航</h4>
+      <ul>
+        {nav.map((link) => (
+          <li><a href={link.url}>{link.label}</a></li>
+        ))}
+      </ul>
+    </nav>
+  </div>
+  <div class="footer-copyright">
+    © {year} {companyName ?? ''}. All rights reserved.
+    {icp && <span> | <a href="https://beian.miit.gov.cn" rel="external">{icp}</a></span>}
+  </div>
+</footer>

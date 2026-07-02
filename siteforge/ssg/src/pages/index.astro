@@ -1,0 +1,98 @@
+---
+/**
+ * 示例首页 - 演示如何使用 SiteLayout + 区块数据渲染页面
+ *
+ * 实际部署时，页面数据应来自：
+ *   - Astro Content Collections（src/content/pages/*.md 的 frontmatter）
+ *   - 或后端 API 注入的站点数据
+ */
+import SiteLayout from '@layouts/SiteLayout.astro'
+import type { SiteData, Page } from '@shared/block-schema'
+
+const site: SiteData = {
+  name: 'SiteForge 演示站',
+  domain: 'example.com',
+  description: '由 SiteForge SSG 引擎生成的企业官网演示',
+  logo: '/logo.svg',
+  phone: '400-888-8888',
+  email: 'contact@example.com',
+  address: '北京市朝阳区科技园',
+  socialLinks: [],
+  navigation: [
+    { label: '首页', url: '/' },
+    { label: '产品', url: '/products' },
+    { label: '案例', url: '/cases' },
+    { label: '关于', url: '/about' },
+    { label: '联系', url: '/contact' },
+  ],
+  allowAiCrawlers: true,
+  pages: [],
+  contents: [],
+}
+
+const page: Page = {
+  id: 'home',
+  slug: 'home',
+  url: '/',
+  title: 'SiteForge - 企业官网搭建系统',
+  blocks: [
+    {
+      id: 'b1',
+      type: 'hero',
+      sortOrder: 1,
+      props: {
+        title: '让企业官网搭建更简单',
+        subtitle: 'AI 解析 + 区块编辑 + 静态发布，一站式搞定企业官网',
+        cta: '立即咨询',
+        ctaUrl: '/contact',
+      },
+    },
+    {
+      id: 'b2',
+      type: 'feature_grid',
+      sortOrder: 2,
+      props: {
+        title: '核心优势',
+        items: [
+          { icon: '⚡', title: '快速搭建', desc: 'AI 解析 URL 自动生成区块结构' },
+          { icon: '🎨', title: '可视化编辑', desc: '拖拽编辑器，所见即所得' },
+          { icon: '🚀', title: '静态发布', desc: 'Astro 零 JS 输出，性能极佳' },
+          { icon: '🔍', title: 'SEO/GEO 优化', desc: '自动注入 TDK/Schema/llms.txt' },
+        ],
+      },
+    },
+    {
+      id: 'b3',
+      type: 'stats',
+      sortOrder: 3,
+      props: {
+        items: [
+          { number: '100', suffix: '+', label: '企业客户' },
+          { number: '50', suffix: 'ms', label: '首屏加载' },
+          { number: '16', label: '区块类型' },
+          { number: '0', label: 'JS 输出' },
+        ],
+      },
+    },
+    {
+      id: 'b4',
+      type: 'cta',
+      sortOrder: 4,
+      props: {
+        title: '准备好开启你的企业官网了吗？',
+        subtitle: '5 分钟搭建，1 键发布',
+        button: '立即咨询',
+        buttonUrl: '/contact',
+      },
+    },
+  ],
+  seoMeta: {
+    title: 'SiteForge - AI 驱动的企业官网搭建系统',
+    description: '让企业官网搭建更简单：AI 解析 + 区块编辑 + 静态发布，SEO/GEO 全面优化。',
+    keywords: ['企业官网', '网站搭建', 'SSG', 'Astro', 'SEO'],
+  },
+  priority: 1.0,
+  changefreq: 'weekly',
+}
+---
+<SiteLayout site={site} page={page} />

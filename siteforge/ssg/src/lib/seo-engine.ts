@@ -1,0 +1,368 @@
+/**
+ * SiteForge - SEO 引擎（TypeScript 重写版）
+ *
+ * 复用原型 siteforge-prototype/src/seo/seo-engine.js 的逻辑，
+ * 用 TypeScript 重写，类型安全。
+ *
+ * 职责：
+ *   1) generateSitemap   - sitemap.xml 生成
+ *   2) generateRobotsTxt - robots.txt 生成（含 AI 爬虫放行 = GEO 关键）
+ *   3) generateSchema    - Schema.org JSON-LD 生成
+ *   4) runHealthCheck    - SEO 健康度检查
+ */
+
+import type { SiteData, Page } from '@shared/block-schema'
+
+// 内容集合条目类型（站点数据中的 contents 数组元素）
+export interface ContentEntry {
+  type: 'product' | 'case' | 'post'
+  slug: string
+  title: string
+  summary?: string
+  coverImage?: string
+  status?: 'draft' | 'published'
+  updatedAt?: string
+  meta?: {
+    author?: string
+    authorTitle?: string
+    publishedAt?: string
+    updatedAt?: string
+  }
+}
+
+export interface Breadcrumb {
+  name: string
+  url: string
+}
+
+// ============================================================================
+// sitemap.xml 生成
+// ============================================================================
+
+export function generateSitemap(site: SiteData): string {
+  const urls: string[] = []
+  const today = new Date().toISOString().split('T')[0]
+
+  // 页面
+  for (const page of site.pages ?? []) {
+    urls.push(`  <url>
+    <loc>https://${site.domain}${page.url}</loc>
+    <lastmod>${page.updatedAt ?? today}</lastmod>
+    <changefreq>${page.changefreq ?? 'weekly'}</changefreq>
+    <priority>${page.priority ?? 0.8}</priority>
+  </url>`)
+  }
+
+  // 已发布内容
+  for (const content of (site.contents ?? []).filter((c) => c.status === 'published')) {
+    const basePath =
+      content.type === 'product'
+        ? '/products'
+        : content.type === 'case'
+          ? '/cases'
+          : '/posts'
+    urls.push(`  <url>
+    <loc>https://${site.domain}${basePath}/${content.slug}</loc>
+    <lastmod>${content.updatedAt ?? today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>`)
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>`
+}
+
+// ============================================================================
+// robots.txt 生成（SEO + GEO 双重考虑）
+// ============================================================================
+
+/** AI 爬虫白名单（GEO 关键） */
+export const AI_CRAWLER_WHITELIST: Array<{ agent: string; platform: string }> = [
+  { agent: 'GPTBot', platform: 'ChatGPT' },
+  { agent: 'OAI-SearchBot', platform: 'ChatGPT Search' },
+  { agent: 'ChatGPT-User', platform: 'ChatGPT' },
+  { agent: 'ClaudeBot', platform: 'Claude' },
+  { agent: 'Claude-SearchBot', platform: 'Claude Search' },
+  { agent: 'CCBot', platform: 'Common Crawl' },
+  { agent: 'Google-Extended', platform: 'Google AI' },
+  { agent: 'PerplexityBot', platform: 'Perplexity' },
+  { agent: 'Applebot-Extended', platform: 'Apple Intelligence' },
+]
+
+export function generateRobotsTxt(site: SiteData): string {
+  const lines: string[] = []
+
+  // 默认放行
+  lines.push('User-agent: *')
+  lines.push('Allow: /')
+  lines.push('Disallow: /admin/')
+  lines.push('')
+
+  // 主动放行 AI 爬虫（GEO 关键！）
+  if (site.allowAiCrawlers !== false) {
+    for (const bot of AI_CRAWLER_WHITELIST) {
+      lines.push(`# ${bot.platform}`)
+      lines.push(`User-agent: ${bot.agent}`)
+      lines.push('Allow: /')
+      lines.push('')
+    }
+  }
+
+  lines.push(`Sitemap: https://${site.domain}/sitemap.xml`)
+
+  return lines.join('\n')
+}
+
+// ============================================================================
+// Schema.org JSON-LD 生成
+// ============================================================================
+
+export function generateSchema(
+  site: SiteData,
+  page: Page | null,
+  content: ContentEntry | null,
+  breadcrumbs: Breadcrumb[] | null,
+): string {
+  const schemas: Record<string, unknown>[] = []
+
+  // 全站 Organization schema
+  schemas.push({
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: site.name,
+    url: `https://${site.domain}`,
+    logo: site.logo ?? '',
+    description: site.description ?? '',
+    sameAs: site.socialLinks ?? [],
+    ...(site.phone ? { telephone: site.phone } : {}),
+    ...(site.email ? { email: site.email } : {}),
+    ...(site.address
+      ? { address: { '@type': 'PostalAddress', addressLocality: site.address } }
+      : {}),
+  })
+
+  // 页面级 schema（内容详情）
+  if (content) {
+    if (content.type === 'product') {
+      schemas.push({
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: content.title,
+        description: content.summary ?? '',
+        brand: { '@type': 'Brand', name: site.name },
+        image: content.coverImage ?? '',
+      })
+    } else if (content.type === 'post' || content.type === 'case') {
+      const articleSchema: Record<string, unknown> = {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: content.title,
+        image: content.coverImage ?? '',
+        publisher: {
+          '@type': 'Organization',
+          name: site.name,
+          logo: { '@type': 'ImageObject', url: site.logo ?? '' },
+        },
+      }
+      if (content.meta) {
+        if (content.meta.author) {
+          articleSchema.author = {
+            '@type': 'Person',
+            name: content.meta.author,
+            ...(content.meta.authorTitle ? { jobTitle: content.meta.authorTitle } : {}),
+          }
+        }
+        if (content.meta.publishedAt) {
+          articleSchema.datePublished = content.meta.publishedAt
+        }
+        if (content.meta.updatedAt) {
+          articleSchema.dateModified = content.meta.updatedAt
+        }
+      }
+      schemas.push(articleSchema)
+    }
+  }
+
+  // FAQ schema（自动从 faq 区块提取）
+  if (page) {
+    const faqBlocks = page.blocks.filter((b) => b.type === 'faq')
+    if (faqBlocks.length > 0) {
+      const allFaqs: Array<{ question?: string; answer?: string }> = []
+      for (const fb of faqBlocks) {
+        const items = (fb.props as { items?: Array<{ question?: string; answer?: string }> }).items
+        if (Array.isArray(items)) {
+          allFaqs.push(...items)
+        }
+      }
+      if (allFaqs.length > 0) {
+        schemas.push({
+          '@context': 'https://schema.org',
+          '@type': 'FAQPage',
+          mainEntity: allFaqs.map((faq) => ({
+            '@type': 'Question',
+            name: faq.question ?? '',
+            acceptedAnswer: { '@type': 'Answer', text: faq.answer ?? '' },
+          })),
+        })
+      }
+    }
+  }
+
+  // Breadcrumb schema
+  if (breadcrumbs && breadcrumbs.length > 0) {
+    schemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: breadcrumbs.map((bc, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: bc.name,
+        item: `https://${site.domain}${bc.url}`,
+      })),
+    })
+  }
+
+  return schemas
+    .map(
+      (s) =>
+        `<script type="application/ld+json">\n${JSON.stringify(s, null, 2)}\n</script>`,
+    )
+    .join('\n')
+}
+
+// ============================================================================
+// SEO 健康度检查
+// ============================================================================
+
+export interface SeoIssue {
+  page: string
+  severity: 'error' | 'warning'
+  check: string
+  message: string
+  autoFix: boolean
+}
+
+export interface SeoHealthReport {
+  score: number
+  level: 'excellent' | 'good' | 'fair' | 'poor'
+  totalChecks: number
+  passedChecks: number
+  issues: SeoIssue[]
+  checkedAt: string
+}
+
+export function runHealthCheck(
+  site: SiteData,
+  pagesHtml: Array<{ page: Page; html: string }>,
+): SeoHealthReport {
+  const issues: SeoIssue[] = []
+  let totalChecks = 0
+  let passedChecks = 0
+
+  for (const { page, html } of pagesHtml) {
+    // TDK 完整性
+    totalChecks++
+    if (page.seoMeta?.title && page.seoMeta?.description) {
+      passedChecks++
+    } else {
+      issues.push({
+        page: page.url,
+        severity: 'error',
+        check: 'TDK 完整性',
+        message: `页面 "${page.title}" 缺少 ${
+          !page.seoMeta?.title ? 'SEO 标题' : ''
+        } ${!page.seoMeta?.description ? 'SEO 描述' : ''}`.trim(),
+        autoFix: true,
+      })
+    }
+
+    // H1 标签
+    totalChecks++
+    const h1Count = (html.match(/<h1/gi) ?? []).length
+    if (h1Count === 1) {
+      passedChecks++
+    } else {
+      issues.push({
+        page: page.url,
+        severity: 'error',
+        check: 'H1 标签',
+        message: `页面 "${page.title}" 有 ${h1Count} 个 H1，应为 1 个`,
+        autoFix: false,
+      })
+    }
+
+    // 图片 alt
+    totalChecks++
+    const images = html.match(/<img[^>]*>/gi) ?? []
+    const imagesWithoutAlt = images.filter(
+      (img) => !img.includes('alt=') || img.includes('alt=""'),
+    )
+    if (images.length === 0 || imagesWithoutAlt.length === 0) {
+      passedChecks++
+    } else {
+      issues.push({
+        page: page.url,
+        severity: 'warning',
+        check: '图片 alt',
+        message: `页面 "${page.title}" 有 ${imagesWithoutAlt.length} 个图片缺少 alt 文本`,
+        autoFix: true,
+      })
+    }
+
+    // canonical
+    totalChecks++
+    if (page.seoMeta?.canonical || html.includes('rel="canonical"')) {
+      passedChecks++
+    } else {
+      issues.push({
+        page: page.url,
+        severity: 'warning',
+        check: 'canonical 标签',
+        message: `页面 "${page.title}" 缺少 canonical 标签`,
+        autoFix: true,
+      })
+    }
+
+    // 结构化数据
+    totalChecks++
+    if (html.includes('application/ld+json')) {
+      passedChecks++
+    } else {
+      issues.push({
+        page: page.url,
+        severity: 'warning',
+        check: '结构化数据',
+        message: `页面 "${page.title}" 未注入 Schema.org 结构化数据`,
+        autoFix: true,
+      })
+    }
+  }
+
+  // AI 爬虫放行（GEO 检查）
+  totalChecks++
+  if (site.allowAiCrawlers !== false) {
+    passedChecks++
+  } else {
+    issues.push({
+      page: '/robots.txt',
+      severity: 'warning',
+      check: 'AI 爬虫放行（GEO）',
+      message:
+        'robots.txt 未放行 AI 爬虫（GPTBot/ClaudeBot/PerplexityBot），影响 GEO 效果',
+      autoFix: true,
+    })
+  }
+
+  const score = Math.round((passedChecks / Math.max(totalChecks, 1)) * 100)
+  return {
+    score,
+    level: score >= 80 ? 'excellent' : score >= 60 ? 'good' : score >= 40 ? 'fair' : 'poor',
+    totalChecks,
+    passedChecks,
+    issues,
+    checkedAt: new Date().toISOString(),
+  }
+}

@@ -1,0 +1,360 @@
+// SiteForge Prisma Schema
+// 基于架构方案第 5 节数据模型设计
+// 14 张表：sites, pages, blocks, collections, contents, forms, leads,
+//         media, navigation, users, license, seo_reports, geo_scores, build_jobs
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 1. 站点表 — 一个站点 = 一个企业官网
+// ============================================================================
+model Site {
+  id          String   @id @default(cuid())
+  domain      String   @unique // 站点域名，如 www.example.com
+  name        String   // 站点名称
+  status      SiteStatus @default(DRAFT)
+  themeConfig Json     @default("{}") // 主题配置：颜色、字体、布局
+  seoConfig   Json     @default("{}") // 全局 SEO 配置：TDK 模板、sitemap 等
+  geoConfig   Json     @default("{}") // 全局 GEO 配置：llms.txt、AI 爬虫放行等
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  pages       Page[]
+  collections Collection[]
+  forms       Form[]
+  media       Media[]
+  navigation  Navigation[]
+  seoReports  SeoReport[]
+  buildJobs   BuildJob[]
+
+  @@map("sites")
+  @@index([status])
+}
+
+// ============================================================================
+// 2. 页面表 — 静态页面（首页、关于、联系等）
+// ============================================================================
+model Page {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  slug      String   // URL slug，如 home / about / contact
+  title     String   // 页面标题
+  type      PageType // 页面类型
+  seoMeta   Json     @default("{}") @map("seo_meta") // TDK / Schema / canonical
+  status    PageStatus @default(DRAFT)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  blocks    Block[]
+
+  @@unique([siteId, slug])
+  @@map("pages")
+  @@index([siteId])
+}
+
+// ============================================================================
+// 3. 区块表 — 页面由区块序列组成（可选独立表，便于复用与排序）
+// ============================================================================
+model Block {
+  id        String   @id @default(cuid())
+  pageId    String   @map("page_id")
+  type      String   // 区块类型：hero / feature_grid / faq / form / footer 等
+  props     Json     @default("{}") // 区块属性，JSONB 灵活数据
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("blocks")
+  @@index([pageId, sortOrder])
+}
+
+// ============================================================================
+// 4. 内容集合表 — 动态内容列表（产品/案例/文章）
+// ============================================================================
+model Collection {
+  id            String   @id @default(cuid())
+  siteId        String   @map("site_id")
+  type          CollectionType // product / case / post
+  name          String   // 集合名称，如 "产品集"
+  slug          String   // URL 前缀，如 products / cases / posts
+  fieldsSchema  Json     @default("[]") @map("fields_schema") // 自定义字段 schema（Zod 定义）
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  site          Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  contents      Content[]
+
+  @@unique([siteId, slug])
+  @@map("collections")
+  @@index([siteId, type])
+}
+
+// ============================================================================
+// 5. 内容条目表 — 集合下的具体内容（单个产品/案例/文章）
+// ============================================================================
+model Content {
+  id           String   @id @default(cuid())
+  collectionId String   @map("collection_id")
+  slug         String   // 详情页 URL slug
+  title        String
+  fields       Json     @default("{}") // 自定义字段内容，JSONB
+  status       ContentStatus @default(DRAFT)
+  seoMeta      Json     @default("{}") @map("seo_meta") // TDK / Schema
+  geoMeta      Json     @default("{}") @map("geo_meta") // GEO 元数据：作者、权威信号等
+  author       String?  // 作者（GEO 权威信号）
+  publishedAt  DateTime? @map("published_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  geoScores    GeoScore[]
+
+  @@unique([collectionId, slug])
+  @@map("contents")
+  @@index([collectionId, status])
+}
+
+// ============================================================================
+// 6. 表单表 — 用户可自定义表单
+// ============================================================================
+model Form {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  name      String   // 表单名称
+  fields    Json     @default("[]") // 字段定义，JSONB
+  settings  Json     @default("{}") // 表单设置：通知方式、防垃圾等
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  leads     Lead[]
+
+  @@map("forms")
+  @@index([siteId])
+}
+
+// ============================================================================
+// 7. 线索表 — 表单提交数据，100% 本地存储，零外发
+// ============================================================================
+model Lead {
+  id         String   @id @default(cuid())
+  formId     String   @map("form_id")
+  siteId     String   @map("site_id")
+  data       Json     // 提交数据，JSONB
+  sourcePage String?  @map("source_page") // 来源页面 URL
+  ip         String?  // 提交者 IP（用于反垃圾）
+  userAgent  String?  @map("user_agent")
+  status     LeadStatus @default(NEW)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@map("leads")
+  @@index([siteId, createdAt])
+  @@index([formId, status])
+}
+
+// ============================================================================
+// 8. 媒体库表 — 用户上传的图片/文件
+// ============================================================================
+model Media {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  filename  String   // 存储文件名（重命名后）
+  originalName String @map("original_name") // 原始文件名
+  path      String   // 存储路径，如 /media/<site_id>/<filename>
+  mime      String   // MIME 类型
+  size      Int      // 文件大小（字节）
+  alt       String?  // alt 文本（SEO/GEO）
+  width     Int?     // 图片宽度
+  height    Int?     // 图片高度
+  createdAt DateTime @default(now()) @map("created_at")
+
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@map("media")
+  @@index([siteId])
+}
+
+// ============================================================================
+// 9. 导航表 — 站点菜单结构
+// ============================================================================
+model Navigation {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  location  String   // 位置：header / footer / mobile
+  items     Json     @default("[]") // 导航项 JSONB：[{label, url, children:[]}]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, location])
+  @@map("navigation")
+}
+
+// ============================================================================
+// 10. 用户表 — 管理员账号
+// ============================================================================
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  email        String   @unique
+  role         UserRole @default(ADMIN)
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// ============================================================================
+// 11. License 表 — 授权信息（单实例单条记录）
+// ============================================================================
+model License {
+  id           String   @id @default(cuid())
+  licenseData  Json     @map("license_data") // 完整 License 文件内容，JSONB
+  machineId    String   @unique @map("machine_id") // 绑定的机器码
+  domain       String?  // 绑定的域名
+  status       LicenseStatus @default(INACTIVE)
+  verifiedAt   DateTime? @map("verified_at")
+  expireAt     DateTime? @map("expire_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("license")
+}
+
+// ============================================================================
+// 12. SEO 报告表 — 站点 SEO 体检报告
+// ============================================================================
+model SeoReport {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  score     Int      // 总分 0-100
+  issues    Json     @default("[]") // 问题列表 JSONB：[{level, item, fixable, suggestion}]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@map("seo_reports")
+  @@index([siteId, createdAt])
+}
+
+// ============================================================================
+// 13. GEO 评分表 — 内容可引用性评分（6 维度）
+// ============================================================================
+model GeoScore {
+  id          String   @id @default(cuid())
+  contentId   String   @map("content_id")
+  score       Int      // 总分 0-100
+  dimensions  Json     @default("{}") // 6 维度评分：{factDensity, structure, citations, authority, completeness, semanticClarity}
+  suggestions Json     @default("[]") // 优化建议列表 JSONB
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  content     Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@map("geo_scores")
+  @@index([contentId, createdAt])
+}
+
+// ============================================================================
+// 14. 构建任务表 — SSG 构建队列
+// ============================================================================
+model BuildJob {
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  status    BuildJobStatus @default(PENDING)
+  trigger   String   // 触发方式：manual / publish / schedule
+  output    Json     @default("{}") // 构建输出：日志、产物路径、错误信息
+  startedAt DateTime? @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@map("build_jobs")
+  @@index([siteId, status])
+  @@index([status, createdAt])
+}
+
+// ============================================================================
+// 枚举类型
+// ============================================================================
+
+enum SiteStatus {
+  DRAFT        // 草稿
+  PUBLISHED    // 已发布
+  ARCHIVED     // 已归档
+}
+
+enum PageType {
+  HOME       // 首页
+  ABOUT      // 关于
+  CONTACT    // 联系
+  PRODUCT_LIST   // 产品列表页
+  CASE_LIST      // 案例列表页
+  POST_LIST      // 文章列表页
+  FAQ         // FAQ 页
+  CUSTOM      // 自定义页
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CollectionType {
+  PRODUCT  // 产品
+  CASE     // 案例
+  POST     // 文章
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LeadStatus {
+  NEW       // 新线索
+  READ      // 已读
+  REPLIED   // 已回复
+  ARCHIVED  // 已归档
+  SPAM      // 垃圾
+}
+
+enum UserRole {
+  ADMIN      // 超级管理员
+  EDITOR     // 编辑
+  VIEWER     // 只读
+}
+
+enum LicenseStatus {
+  INACTIVE   // 未激活
+  ACTIVE     // 已激活
+  EXPIRED    // 已过期
+  REVOKED    // 已吊销
+}
+
+enum BuildJobStatus {
+  PENDING    // 排队中
+  BUILDING   // 构建中
+  DONE       // 完成
+  FAILED     // 失败
+  CANCELLED  // 已取消
+}

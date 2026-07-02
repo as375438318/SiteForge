@@ -1,0 +1,11 @@
+---
+/**
+ * Placeholder - 占位提示组件（编辑态可见，发布态可隐藏）
+ * 与原型 block-renderer.js 中的 PLACEHOLDER 对应
+ */
+interface Props {
+  text: string
+}
+const { text } = Astro.props
+---
+<span class="sf-placeholder">{text}</span>

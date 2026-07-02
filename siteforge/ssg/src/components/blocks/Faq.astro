@@ -1,0 +1,25 @@
+---
+/**
+ * FAQ 区块 - 常见问题
+ * 语义化：<section> + <h2> + <details>/<summary>
+ * 配套 FAQPage Schema.org（由 SiteLayout 注入 JSON-LD）
+ */
+import Placeholder from './Placeholder.astro'
+import type { FaqProps } from '@shared/block-schema'
+
+interface Props extends FaqProps {}
+const { title = '常见问题', items = [] } = Astro.props
+---
+<section class="block-faq">
+  <h2>{title}</h2>
+  {items.length === 0 ? (
+    <Placeholder text="添加常见问题" />
+  ) : (
+    items.map((item) => (
+      <details class="faq-item">
+        <summary>{item.question ?? <Placeholder text="问题" />}</summary>
+        <p>{item.answer ?? <Placeholder text="回答" />}</p>
+      </details>
+    ))
+  )}
+</section>

@@ -1,0 +1,32 @@
+---
+/**
+ * Map 区块 - 地图嵌入
+ * 语义化：<section> + <h2>
+ * 支持 iframe 嵌入（用户配置 embedUrl）
+ */
+import Placeholder from './Placeholder.astro'
+import type { MapProps } from '@shared/block-schema'
+
+interface Props extends MapProps {}
+const { title = '地图', address, embedUrl } = Astro.props
+---
+<section class="block-map">
+  <h2>{title}</h2>
+  {embedUrl ? (
+    <div class="map-embed" style="padding:0">
+      <iframe
+        src={embedUrl}
+        width="100%"
+        height="320"
+        style="border:0;display:block"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        title={title}
+      />
+    </div>
+  ) : (
+    <div class="map-embed">
+      <Placeholder text={address ? `地图：${address}` : '配置地图 embed URL'} />
+    </div>
+  )}
+</section>

@@ -1,0 +1,25 @@
+---
+/**
+ * Hero 区块 - 首屏标语
+ * 语义化：<section> + <h1>
+ */
+import Placeholder from './Placeholder.astro'
+import type { HeroProps } from '@shared/block-schema'
+
+interface Props extends HeroProps {}
+const {
+  title,
+  subtitle,
+  cta,
+  ctaUrl = '/contact',
+  backgroundImage,
+  align = 'center',
+} = Astro.props
+---
+<section class="block-hero" class:list={[`align-${align}`]} style={backgroundImage ? `background-image:linear-gradient(135deg,rgba(79,70,229,0.9),rgba(124,58,237,0.9)),url(${backgroundImage});background-size:cover` : undefined}>
+  <div class="hero-content">
+    <h1>{title ?? <Placeholder text="在此输入企业标语" />}</h1>
+    <p>{subtitle ?? <Placeholder text="一句话描述核心价值" />}</p>
+    {cta && <a href={ctaUrl} class="btn-hero">{cta}</a>}
+  </div>
+</section>

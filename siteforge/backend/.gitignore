@@ -1,0 +1,44 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+*.tsbuildinfo
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 测试覆盖率
+coverage/
+
+# Prisma
+prisma/migrations/dev.db*
+prisma/*.db
+
+# 备份与数据
+data/
+backups/
+
+# Docker volume 数据
+nginx/certs/*.pem
+!nginx/certs/.gitkeep
+nginx/logs/

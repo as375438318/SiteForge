@@ -1,0 +1,24 @@
+{
+  "name": "siteforge-ssg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SiteForge 静态站点生成器 — Astro + TypeScript + Zod",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "generate": "tsx src/lib/site-generator.ts",
+    "typecheck": "astro check && tsc --noEmit"
+  },
+  "dependencies": {
+    "astro": "^4.16.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

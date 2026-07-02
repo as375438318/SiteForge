@@ -1,0 +1,63 @@
+---
+/**
+ * ContactInfo 区块 - 联系方式展示
+ * 语义化：<section> + <h2> + <address>
+ */
+import Placeholder from './Placeholder.astro'
+import type { ContactInfoProps } from '@shared/block-schema'
+
+interface Props extends ContactInfoProps {}
+const {
+  title = '联系我们',
+  phone,
+  email,
+  address,
+  wechat,
+  workingHours,
+} = Astro.props
+---
+<section class="block-contact-info">
+  <h2>{title}</h2>
+  <address class="contact-list">
+    {phone && (
+      <li>
+        <span class="contact-label">电话</span>
+        <a href={`tel:${phone}`}>{phone}</a>
+      </li>
+    )}
+    {!phone && (
+      <li>
+        <span class="contact-label">电话</span>
+        <Placeholder text="电话" />
+      </li>
+    )}
+    {email && (
+      <li>
+        <span class="contact-label">邮箱</span>
+        <a href={`mailto:${email}`}>{email}</a>
+      </li>
+    )}
+    {!email && (
+      <li>
+        <span class="contact-label">邮箱</span>
+        <Placeholder text="邮箱" />
+      </li>
+    )}
+    <li>
+      <span class="contact-label">地址</span>
+      {address ?? <Placeholder text="地址" />}
+    </li>
+    {wechat && (
+      <li>
+        <span class="contact-label">微信</span>
+        {wechat}
+      </li>
+    )}
+    {workingHours && (
+      <li>
+        <span class="contact-label">工作时间</span>
+        {workingHours}
+      </li>
+    )}
+  </address>
+</section>

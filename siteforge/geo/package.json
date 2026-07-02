@@ -1,0 +1,26 @@
+{
+  "name": "@siteforge/geo",
+  "version": "1.0.0",
+  "description": "SiteForge GEO 引擎 — 面向 AI 搜索引擎的生成式引擎优化模块",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.12"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

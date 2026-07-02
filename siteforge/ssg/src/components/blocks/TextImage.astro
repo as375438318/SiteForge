@@ -1,0 +1,32 @@
+---
+/**
+ * TextImage 区块 - 图文混排
+ * 语义化：<section> + <article>
+ */
+import Placeholder from './Placeholder.astro'
+import type { TextImageProps } from '@shared/block-schema'
+
+interface Props extends TextImageProps {}
+const {
+  title,
+  content,
+  image,
+  imageAlt,
+  imagePosition = 'right',
+} = Astro.props
+---
+<section class:list={['block-text-image', `image-${imagePosition}`]}>
+  <article class="text-content">
+    <h2>{title ?? <Placeholder text="标题" />}</h2>
+    <div set:html={content ?? ''}>
+      {!content && <Placeholder text="在此填写内容..." />}
+    </div>
+  </article>
+  <div class="image-content">
+    {image ? (
+      <img src={image} alt={imageAlt ?? ''} loading="lazy" />
+    ) : (
+      <Placeholder text="图片" />
+    )}
+  </div>
+</section>

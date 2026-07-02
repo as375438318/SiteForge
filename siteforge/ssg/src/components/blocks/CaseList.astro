@@ -1,0 +1,68 @@
+---
+/**
+ * CaseList 区块 - 成功案例列表
+ * 语义化：<section> + <h2> + <article> per case
+ */
+import Placeholder from './Placeholder.astro'
+import type { CaseListProps } from '@shared/block-schema'
+import { getCollection } from 'astro:content'
+
+interface Props extends CaseListProps {}
+const {
+  title,
+  limit = 6,
+  showIndustry = true,
+  showMetrics = true,
+} = Astro.props
+
+let entries: Array<{
+  slug: string
+  data: {
+    title: string
+    summary?: string
+    coverImage?: string
+    industry?: string
+    metrics?: string
+  }
+}> = []
+
+try {
+  const raw = await getCollection('cases')
+  entries = raw
+    .filter((e: any) => e.data.status !== 'draft')
+    .slice(0, limit)
+    .map((e: any) => ({ slug: e.slug, data: e.data }))
+} catch {
+  // collection 不存在时静默降级
+}
+---
+<section class="block-case-list">
+  <h2>{title ?? '成功案例'}</h2>
+  <div class="case-list" id="case-list">
+    {entries.length === 0 ? (
+      <Placeholder text="案例列表将自动从 CMS 内容生成" />
+    ) : (
+      entries.map((entry) => (
+        <article class="case-card">
+          {entry.data.coverImage && (
+            <a href={`/cases/${entry.slug}`}>
+              <img src={entry.data.coverImage} alt={entry.data.title} loading="lazy" />
+            </a>
+          )}
+          <div class="case-card-body">
+            {showIndustry && entry.data.industry && (
+              <span class="case-industry">{entry.data.industry}</span>
+            )}
+            <h3>
+              <a href={`/cases/${entry.slug}`}>{entry.data.title}</a>
+            </h3>
+            {entry.data.summary && <p>{entry.data.summary}</p>}
+            {showMetrics && entry.data.metrics && (
+              <div class="case-metrics">{entry.data.metrics}</div>
+            )}
+          </div>
+        </article>
+      ))
+    )}
+  </div>
+</section>

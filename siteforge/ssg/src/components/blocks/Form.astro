@@ -1,0 +1,84 @@
+---
+/**
+ * Form 区块 - 在线咨询表单
+ * 语义化：<section> + <h2> + <form>
+ * 提交目标：/api/leads/submit（后端线索系统）
+ */
+import type { FormProps } from '@shared/block-schema'
+
+interface Props extends FormProps {}
+const {
+  title = '在线咨询',
+  action = '/api/leads/submit',
+  method = 'POST',
+  fields,
+  submitLabel = '提交咨询',
+} = Astro.props
+
+// 默认字段（与原型一致：姓名 / 电话 / 需求）
+const defaultFields = [
+  {
+    name: 'name',
+    label: '您的姓名',
+    type: 'text' as const,
+    required: true,
+    placeholder: '您的姓名',
+  },
+  {
+    name: 'phone',
+    label: '联系电话',
+    type: 'tel' as const,
+    required: true,
+    placeholder: '联系电话',
+  },
+  {
+    name: 'message',
+    label: '您的需求',
+    type: 'textarea' as const,
+    required: false,
+    placeholder: '您的需求',
+  },
+]
+const renderFields = fields && fields.length > 0 ? fields : defaultFields
+---
+<section class="block-form">
+  <h2>{title}</h2>
+  <form action={action} method={method} class="contact-form">
+    {renderFields.map((field) => (
+      <div class="form-field">
+        <label for={`field-${field.name}`}>
+          {field.label}
+          {field.required && <span class="required">*</span>}
+        </label>
+        {field.type === 'textarea' ? (
+          <textarea
+            id={`field-${field.name}`}
+            name={field.name}
+            placeholder={field.placeholder ?? ''}
+            required={field.required}
+            rows={4}
+          />
+        ) : field.type === 'select' ? (
+          <select
+            id={`field-${field.name}`}
+            name={field.name}
+            required={field.required}
+          >
+            {(field.options ?? []).map((opt) => (
+              <option value={opt}>{opt}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={`field-${field.name}`}
+            type={field.type}
+            name={field.name}
+            placeholder={field.placeholder ?? ''}
+            required={field.required}
+          />
+        )}
+      </div>
+    ))}
+    <button type="submit" class="btn-submit">{submitLabel}</button>
+  </form>
+</section>

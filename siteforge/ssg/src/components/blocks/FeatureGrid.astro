@@ -1,0 +1,27 @@
+---
+/**
+ * FeatureGrid 区块 - 核心优势网格
+ * 语义化：<section> + <h2> + <article> per item
+ */
+import Placeholder from './Placeholder.astro'
+import type { FeatureGridProps } from '@shared/block-schema'
+
+interface Props extends FeatureGridProps {}
+const { title, items = [], columns = 3 } = Astro.props
+---
+<section class="block-feature-grid">
+  <h2>{title ?? '核心优势'}</h2>
+  <div class="feature-grid" style={`grid-template-columns:repeat(${Math.min(columns, 6)},1fr)`}>
+    {items.length === 0 ? (
+      <Placeholder text="添加优势条目" />
+    ) : (
+      items.map((item) => (
+        <article class="feature-item">
+          <div class="feature-icon">{item.icon ?? '✦'}</div>
+          <h3>{item.title ?? <Placeholder text="优势标题" />}</h3>
+          <p>{item.desc ?? <Placeholder text="优势描述" />}</p>
+        </article>
+      ))
+    )}
+  </div>
+</section>

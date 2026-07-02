@@ -1,0 +1,32 @@
+---
+/**
+ * Team 区块 - 团队成员展示
+ * 语义化：<section> + <h2> + <article> per member
+ */
+import Placeholder from './Placeholder.astro'
+import type { TeamProps } from '@shared/block-schema'
+
+interface Props extends TeamProps {}
+const { title, members = [] } = Astro.props
+---
+<section class="block-team">
+  <h2>{title ?? '团队介绍'}</h2>
+  <div class="team-grid" id="team-list">
+    {members.length === 0 ? (
+      <Placeholder text="添加团队成员" />
+    ) : (
+      members.map((member) => (
+        <article class="team-member">
+          <div class="avatar">
+            {member.avatar ? (
+              <img src={member.avatar} alt={member.name ?? ''} loading="lazy" />
+            ) : null}
+          </div>
+          <h3>{member.name ?? <Placeholder text="姓名" />}</h3>
+          {member.title && <p class="member-title">{member.title}</p>}
+          {member.bio && <p class="member-bio">{member.bio}</p>}
+        </article>
+      ))
+    )}
+  </div>
+</section>

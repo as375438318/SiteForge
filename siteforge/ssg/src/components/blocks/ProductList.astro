@@ -1,0 +1,59 @@
+---
+/**
+ * ProductList 区块 - 产品纵向列表
+ * 语义化：<section> + <h2> + <article> per item
+ */
+import Placeholder from './Placeholder.astro'
+import type { ProductListProps } from '@shared/block-schema'
+import { getCollection } from 'astro:content'
+
+interface Props extends ProductListProps {}
+const {
+  title,
+  collection = 'products',
+  limit = 10,
+  showExcerpt = true,
+} = Astro.props
+
+let entries: Array<{
+  slug: string
+  data: { title: string; summary?: string; coverImage?: string; publishedAt?: string }
+}> = []
+
+try {
+  const raw = await getCollection(collection as any)
+  entries = raw
+    .filter((e: any) => e.data.status !== 'draft')
+    .slice(0, limit)
+    .map((e: any) => ({ slug: e.slug, data: e.data }))
+} catch {
+  // collection 不存在时静默降级到占位
+}
+---
+<section class="block-product-list">
+  <h2>{title ?? '产品服务'}</h2>
+  <div class="product-list" id="product-list">
+    {entries.length === 0 ? (
+      <Placeholder text="产品列表将自动从 CMS 内容生成" />
+    ) : (
+      entries.map((entry) => (
+        <article class="product-card">
+          {entry.data.coverImage && (
+            <a href={`/${collection}/${entry.slug}`}>
+              <img src={entry.data.coverImage} alt={entry.data.title} loading="lazy" />
+            </a>
+          )}
+          <div class="product-card-body">
+            <h3>
+              <a href={`/${collection}/${entry.slug}`}>{entry.data.title}</a>
+            </h3>
+            {showExcerpt && entry.data.summary && <p>{entry.data.summary}</p>}
+            {entry.data.publishedAt && (
+              <time datetime={entry.data.publishedAt}>{entry.data.publishedAt}</time>
+            )}
+          </div>
+        </article>
+      ))
+    )}
+  </div>
+</section>

@@ -1,0 +1,15 @@
+---
+/**
+ * PageHeader 区块 - 页面顶部标题区
+ * 语义化：<header> + <h1>
+ */
+import Placeholder from './Placeholder.astro'
+import type { PageHeaderProps } from '@shared/block-schema'
+
+interface Props extends PageHeaderProps {}
+const { title, subtitle, backgroundImage } = Astro.props
+---
+<header class="block-page-header" style={backgroundImage ? `background-image:url(${backgroundImage});background-size:cover;background-position:center` : undefined}>
+  <h1>{title ?? <Placeholder text="页面标题" />}</h1>
+  {subtitle && <p>{subtitle}</p>}
+</header>

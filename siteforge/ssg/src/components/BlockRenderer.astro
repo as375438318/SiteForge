@@ -1,0 +1,57 @@
+---
+/**
+ * BlockRenderer - Astro 运行时区块渲染器
+ *
+ * 接收 BlockInstance[] 数组，按 sortOrder 排序后映射到对应 Astro 组件。
+ * 与 src/lib/block-renderer.ts 中的 renderPageBody 互补：
+ *   - lib/block-renderer.ts：纯 HTML 字符串（用于离线生成场景）
+ *   - 本组件：Astro 组件树（用于 dev/preview 场景，支持 islands）
+ */
+import { sortBlocks, validateBlock } from '@lib/block-renderer'
+import type { BlockInstance } from '@shared/block-schema'
+
+import Hero from '@components/blocks/Hero.astro'
+import FeatureGrid from '@components/blocks/FeatureGrid.astro'
+import ProductGrid from '@components/blocks/ProductGrid.astro'
+import ProductList from '@components/blocks/ProductList.astro'
+import CaseList from '@components/blocks/CaseList.astro'
+import PageHeader from '@components/blocks/PageHeader.astro'
+import TextImage from '@components/blocks/TextImage.astro'
+import Team from '@components/blocks/Team.astro'
+import Cta from '@components/blocks/Cta.astro'
+import ContactInfo from '@components/blocks/ContactInfo.astro'
+import Form from '@components/blocks/Form.astro'
+import Stats from '@components/blocks/Stats.astro'
+import Faq from '@components/blocks/Faq.astro'
+import Testimonial from '@components/blocks/Testimonial.astro'
+import Map from '@components/blocks/Map.astro'
+import Footer from '@components/blocks/Footer.astro'
+
+interface Props {
+  blocks: BlockInstance[]
+}
+const { blocks } = Astro.props
+const sorted = sortBlocks(blocks ?? [])
+---
+{sorted.map((block) => {
+  const { type, props } = validateBlock(block)
+  switch (type) {
+    case 'hero': return <Hero {...(props as any)} />
+    case 'feature_grid': return <FeatureGrid {...(props as any)} />
+    case 'product_grid': return <ProductGrid {...(props as any)} />
+    case 'product_list': return <ProductList {...(props as any)} />
+    case 'case_list': return <CaseList {...(props as any)} />
+    case 'page_header': return <PageHeader {...(props as any)} />
+    case 'text_image': return <TextImage {...(props as any)} />
+    case 'team': return <Team {...(props as any)} />
+    case 'cta': return <Cta {...(props as any)} />
+    case 'contact_info': return <ContactInfo {...(props as any)} />
+    case 'form': return <Form {...(props as any)} />
+    case 'stats': return <Stats {...(props as any)} />
+    case 'faq': return <Faq {...(props as any)} />
+    case 'testimonial': return <Testimonial {...(props as any)} />
+    case 'map': return <Map {...(props as any)} />
+    case 'footer': return <Footer {...(props as any)} />
+    default: return <section><p>未知区块: {type}</p></section>
+  }
+})}

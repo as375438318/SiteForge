@@ -1,0 +1,29 @@
+---
+/**
+ * Stats 区块 - 数据统计
+ * 语义化：<section> + <dl>（定义列表）
+ */
+import Placeholder from './Placeholder.astro'
+import type { StatsProps } from '@shared/block-schema'
+
+interface Props extends StatsProps {}
+const { title, items = [] } = Astro.props
+---
+<section class="block-stats">
+  {title && <h2>{title}</h2>}
+  <dl class="stats-grid">
+    {items.length === 0 ? (
+      <Placeholder text="添加统计数据" />
+    ) : (
+      items.map((item) => (
+        <div class="stat-item">
+          <dt class="stat-number">
+            {item.number ?? '0'}
+            {item.suffix ?? ''}
+          </dt>
+          <dd class="stat-label">{item.label ?? ''}</dd>
+        </div>
+      ))
+    )}
+  </dl>
+</section>

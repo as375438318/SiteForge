@@ -1,0 +1,32 @@
+---
+/**
+ * Testimonial 区块 - 客户评价
+ * 语义化：<section> + <blockquote> + <cite>
+ */
+import Placeholder from './Placeholder.astro'
+import type { TestimonialProps } from '@shared/block-schema'
+
+interface Props extends TestimonialProps {}
+const {
+  quote,
+  author,
+  authorTitle,
+  avatar,
+  company,
+} = Astro.props
+---
+<section class="block-testimonial">
+  <blockquote>
+    {quote ?? <Placeholder text="客户评价" />}
+  </blockquote>
+  {avatar && (
+    <div class="author-avatar">
+      <img src={avatar} alt={author ?? ''} loading="lazy" />
+    </div>
+  )}
+  <cite>
+    —— {author ?? ''}
+    {authorTitle ? `，${authorTitle}` : ''}
+    {company ? `，${company}` : ''}
+  </cite>
+</section>

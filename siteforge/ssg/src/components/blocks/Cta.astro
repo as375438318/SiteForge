@@ -1,0 +1,21 @@
+---
+/**
+ * CTA 区块 - 行动召唤
+ * 语义化：<section> + <h2>
+ */
+import Placeholder from './Placeholder.astro'
+import type { CtaProps } from '@shared/block-schema'
+
+interface Props extends CtaProps {}
+const {
+  title,
+  subtitle,
+  button = '立即咨询',
+  buttonUrl = '/contact',
+} = Astro.props
+---
+<section class="block-cta">
+  <h2>{title ?? <Placeholder text="联系我们" />}</h2>
+  {subtitle && <p>{subtitle}</p>}
+  <a href={buttonUrl} class="btn-cta">{button}</a>
+</section>
