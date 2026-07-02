@@ -21,7 +21,7 @@ export class LeadsService {
     sourcePage?: string
     ip?: string
   }) {
-    return this.prisma.lead.create({ data: { ...data, status: 'PENDING' } as any })
+    return this.prisma.lead.create({ data: { ...data, status: 'NEW' } as any })
   }
 
   async updateLeadStatus(id: string, status: string) {

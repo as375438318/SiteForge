@@ -1,7 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common'
 import { SeoService } from './seo.service'
 
-@Controller('api/seo')
+@Controller('seo')
 export class SeoController {
   constructor(private readonly seo: SeoService) {}
 

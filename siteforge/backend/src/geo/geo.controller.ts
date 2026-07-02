@@ -1,7 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common'
 import { GeoService } from './geo.service'
 
-@Controller('api/geo')
+@Controller('geo')
 export class GeoController {
   constructor(private readonly geo: GeoService) {}
 

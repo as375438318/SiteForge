@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, Eye, Check, Sparkles } from 'lucide-react'
-import { Card, CardTitle, Button, Select, Badge } from '@/components/ui'
+import { LayoutGrid, Eye, Check, Sparkles, AlertCircle } from 'lucide-react'
+import { Card, CardTitle, Button, Select, Badge, EmptyState } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { toast } from '@/stores/toast'
+import { apiClient, ApiError } from '@/lib/api'
 
 const INDUSTRIES = ['全部', 'SaaS 软件', '企业官网', '电商零售', '教育培训', '医疗健康', '金融服务', '制造业']
 
@@ -18,44 +19,64 @@ const TONES = [
 
 interface Template {
   id: string
-  name: string
-  industry: string
-  tone: string
-  gradient: string
-  seoScore: number
-  geoScore: number
+  name?: string
+  title?: string
+  industry?: string
+  tone?: string
+  gradient?: string
+  seoScore?: number
+  geoScore?: number
 }
 
-const TEMPLATES: Template[] = [
-  { id: 't1', name: 'Nebula SaaS', industry: 'SaaS 软件', tone: 'purple', gradient: 'from-purple-500 via-violet-500 to-indigo-600', seoScore: 92, geoScore: 88 },
-  { id: 't2', name: 'Apex 企业', industry: '企业官网', tone: 'blue', gradient: 'from-blue-500 via-cyan-500 to-teal-500', seoScore: 90, geoScore: 82 },
-  { id: 't3', name: 'Bazaar 商城', industry: '电商零售', tone: 'orange', gradient: 'from-orange-500 via-amber-500 to-yellow-500', seoScore: 85, geoScore: 70 },
-  { id: 't4', name: 'EduPro 学院', industry: '教育培训', tone: 'green', gradient: 'from-emerald-500 via-green-500 to-lime-500', seoScore: 88, geoScore: 79 },
-  { id: 't5', name: 'MedCare 健康', industry: '医疗健康', tone: 'blue', gradient: 'from-sky-400 via-blue-400 to-cyan-400', seoScore: 86, geoScore: 75 },
-  { id: 't6', name: 'FinEdge 金融', industry: '金融服务', tone: 'dark', gradient: 'from-slate-700 via-gray-800 to-zinc-900', seoScore: 91, geoScore: 84 },
-  { id: 't7', name: 'FactoryPro', industry: '制造业', tone: 'orange', gradient: 'from-red-500 via-orange-500 to-amber-500', seoScore: 83, geoScore: 71 },
-  { id: 't8', name: 'Quantum Tech', industry: 'SaaS 软件', tone: 'purple', gradient: 'from-fuchsia-500 via-purple-500 to-violet-600', seoScore: 94, geoScore: 90 },
-]
+const DEFAULT_GRADIENT = 'from-slate-500 via-slate-600 to-slate-700'
 
 export default function Templates() {
   const navigate = useNavigate()
   const [industry, setIndustry] = useState('全部')
   const [tone, setTone] = useState('all')
   const [hovered, setHovered] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filtered = TEMPLATES.filter((t) => {
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await apiClient.get<Template[] | { items?: Template[] }>('/templates')
+        if (cancelled) return
+        const list = Array.isArray(data) ? data : (data as { items?: Template[] })?.items || []
+        setTemplates(list)
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+        setError(e instanceof Error ? e.message : '加载失败')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filtered = templates.filter((t) => {
     if (industry !== '全部' && t.industry !== industry) return false
     if (tone !== 'all' && t.tone !== tone) return false
     return true
   })
 
   const apply = (t: Template) => {
-    toast.success(`已应用模板「${t.name}」，正在进入编辑器...`)
+    toast.success(`已应用模板「${t.name || t.title || ''}」，正在进入编辑器...`)
     setTimeout(() => navigate('/editor'), 600)
   }
 
   const preview = (t: Template) => {
-    toast.info(`正在预览「${t.name}」...`)
+    toast.info(`正在预览「${t.name || t.title || ''}」...`)
   }
 
   return (
@@ -67,7 +88,7 @@ export default function Templates() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">精选行业模板，开箱即用。已应用 SEO 与 GEO 最佳实践。</p>
         </div>
-        <Badge variant="primary">{filtered.length} / {TEMPLATES.length} 个模板</Badge>
+        <Badge variant="primary">{filtered.length} / {templates.length} 个模板</Badge>
       </div>
 
       {/* Filters */}
@@ -97,8 +118,11 @@ export default function Templates() {
         </div>
       </Card>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="p-16 text-center text-muted-foreground">加载中...</div>
+      ) : error ? (
+        <EmptyState icon={<AlertCircle className="w-10 h-10" />} title="加载失败" description={error} />
+      ) : filtered.length === 0 ? (
         <Card className="text-center py-16 text-muted-foreground">
           <Sparkles className="w-10 h-10 mx-auto mb-3 opacity-40" />
           <div>未找到匹配的模板，试试调整筛选条件</div>
@@ -108,8 +132,7 @@ export default function Templates() {
           {filtered.map((t) => (
             <Card key={t.id} className="!p-0 overflow-hidden group" onMouseEnter={() => setHovered(t.id)} onMouseLeave={() => setHovered(null)}>
               {/* Thumbnail */}
-              <div className={cn('relative aspect-[4/3] bg-gradient-to-br', t.gradient)}>
-                {/* mock layout */}
+              <div className={cn('relative aspect-[4/3] bg-gradient-to-br', t.gradient || DEFAULT_GRADIENT)}>
                 <div className="absolute inset-0 p-4 flex flex-col gap-1.5">
                   <div className="h-2 w-12 bg-white/40 rounded" />
                   <div className="h-1.5 w-20 bg-white/25 rounded mt-1" />
@@ -123,7 +146,6 @@ export default function Templates() {
                     <div className="h-1.5 flex-1 bg-white/20 rounded" />
                   </div>
                 </div>
-                {/* hover overlay */}
                 {hovered === t.id && (
                   <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center gap-2 transition-opacity">
                     <Button size="sm" variant="secondary" onClick={() => preview(t)}>
@@ -134,20 +156,18 @@ export default function Templates() {
                     </Button>
                   </div>
                 )}
-                {/* badges */}
                 <div className="absolute top-2 left-2 flex gap-1">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/90 text-gray-800">{t.industry}</span>
+                  {t.industry && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/90 text-gray-800">{t.industry}</span>}
                 </div>
               </div>
 
-              {/* Meta */}
               <div className="p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <CardTitle className="text-sm">{t.name}</CardTitle>
+                  <CardTitle className="text-sm">{t.name || t.title || '未命名'}</CardTitle>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <Badge variant="success">SEO {t.seoScore}</Badge>
-                  <Badge variant="info">GEO {t.geoScore}</Badge>
+                  {typeof t.seoScore === 'number' && <Badge variant="success">SEO {t.seoScore}</Badge>}
+                  {typeof t.geoScore === 'number' && <Badge variant="info">GEO {t.geoScore}</Badge>}
                 </div>
               </div>
             </Card>
@@ -155,7 +175,6 @@ export default function Templates() {
         </div>
       )}
 
-      {/* Footer hint */}
       <div className="text-center text-xs text-muted-foreground pt-2">
         模板已内置 SEO 结构化数据与 llms.txt，应用后可在编辑器中自由调整
       </div>

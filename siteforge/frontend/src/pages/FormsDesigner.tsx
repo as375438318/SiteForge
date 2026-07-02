@@ -1,7 +1,8 @@
-import { Button, Card, CardHeader, CardTitle, Input, Select, Label, Toggle, Badge } from '@/components/ui'
+import { useEffect, useState } from 'react'
+import { Button, Card, CardHeader, CardTitle, Input, Select, Label, Toggle, Badge, EmptyState } from '@/components/ui'
 import { toast } from '@/stores/toast'
-import { Type, Hash, List, CheckSquare, ChevronDown, Calendar, Phone, Mail, Upload, Plus, GripVertical } from 'lucide-react'
-import { useState } from 'react'
+import { Type, Hash, CheckSquare, ChevronDown, Calendar, Phone, Mail, Plus, GripVertical, AlertCircle } from 'lucide-react'
+import { apiClient, ApiError } from '@/lib/api'
 
 const fieldTypes = [
   { icon: Type, label: '单行文本' }, { icon: Type, label: '多行文本' }, { icon: Hash, label: '数字' },
@@ -9,21 +10,131 @@ const fieldTypes = [
   { icon: Calendar, label: '日期' }, { icon: Phone, label: '电话' }, { icon: Mail, label: '邮箱' },
 ]
 
-const sampleFields = [
-  { label: '姓名', type: '单行文本', required: true },
-  { label: '电话', type: '电话', required: true },
-  { label: '需求描述', type: '多行文本', required: false },
-]
+interface FormField {
+  label: string
+  type: string
+  required: boolean
+}
+interface FormItem {
+  id?: string
+  name?: string
+  title?: string
+  fields?: FormField[]
+  popupEnabled?: boolean
+  floatEnabled?: boolean
+  embedPage?: string
+  notifyEmail?: string
+  webhookUrl?: string
+}
+interface Site {
+  id: string
+  name?: string
+}
 
 export default function FormsDesigner() {
   const [popupEnabled, setPopupEnabled] = useState(false)
   const [floatEnabled, setFloatEnabled] = useState(true)
+  const [fields, setFields] = useState<FormField[]>([])
+  const [formId, setFormId] = useState<string | undefined>(undefined)
+  const [formName, setFormName] = useState('在线咨询')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [siteId, setSiteId] = useState('default')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        let sid = 'default'
+        try {
+          const sitesRes = await apiClient.get<Site[] | { items?: Site[] }>('/sites')
+          const sitesList = Array.isArray(sitesRes) ? sitesRes : (sitesRes as { items?: Site[] })?.items
+          if (sitesList && sitesList.length > 0 && sitesList[0].id) {
+            sid = sitesList[0].id
+          }
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) {
+            window.location.href = '/login'
+            return
+          }
+        }
+        if (cancelled) return
+        setSiteId(sid)
+
+        const data = await apiClient.get<FormItem[] | { items?: FormItem[] }>(`/forms/${sid}`)
+        if (cancelled) return
+        const list = Array.isArray(data) ? data : (data as { items?: FormItem[] })?.items || []
+        if (list.length > 0) {
+          const f = list[0]
+          setFormId(f.id)
+          setFormName(f.name || f.title || '在线咨询')
+          setFields(f.fields || [])
+          if (typeof f.popupEnabled === 'boolean') setPopupEnabled(f.popupEnabled)
+          if (typeof f.floatEnabled === 'boolean') setFloatEnabled(f.floatEnabled)
+        }
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+        setError(e instanceof Error ? e.message : '加载失败')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    try {
+      const payload: FormItem = {
+        name: formName,
+        fields,
+        popupEnabled,
+        floatEnabled,
+      }
+      if (formId) {
+        await apiClient.put(`/forms/${formId}`, payload)
+      } else {
+        const res = await apiClient.post<FormItem>('/forms', { ...payload, siteId })
+        if (res?.id) setFormId(res.id)
+      }
+      toast.success('表单已保存')
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+      toast.error('保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="p-8 text-center text-muted-foreground">加载中...</div>
+  }
+  if (error) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="w-10 h-10" />}
+        title="加载失败"
+        description={error}
+      />
+    )
+  }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div><h1 className="text-2xl font-bold">表单设计器</h1><p className="text-sm text-muted-foreground">设计询盘表单并配置投放位置</p></div>
-        <Button onClick={() => toast.success('表单已保存')}>保存</Button>
+        <Button onClick={save} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
       </div>
 
       <div className="flex h-[calc(100vh-12rem)] gap-5">
@@ -33,7 +144,11 @@ export default function FormsDesigner() {
             <CardHeader><CardTitle className="text-sm">字段库</CardTitle></CardHeader>
             <div className="space-y-1">
               {fieldTypes.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-primary/10 hover:text-primary text-muted-foreground" onClick={() => toast.success(`已添加字段：${f.label}`)}>
+                <div
+                  key={i}
+                  className="flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-primary/10 hover:text-primary text-muted-foreground"
+                  onClick={() => setFields((prev) => [...prev, { label: f.label, type: f.label, required: false }])}
+                >
                   <f.icon className="w-3.5 h-3.5" /> {f.label}
                 </div>
               ))}
@@ -44,23 +159,55 @@ export default function FormsDesigner() {
         {/* Center: Form Canvas */}
         <div className="flex-1">
           <Card className="h-full">
-            <CardHeader><CardTitle>表单：在线咨询</CardTitle><Badge variant="success">3个字段</Badge></CardHeader>
+            <CardHeader>
+              <CardTitle>表单：{formName}</CardTitle>
+              <Badge variant="success">{fields.length}个字段</Badge>
+            </CardHeader>
             <div className="space-y-3">
-              {sampleFields.map((field, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 border border-border rounded-lg">
-                  <GripVertical className="w-4 h-4 text-muted-foreground" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{field.label}</span>
-                      {field.required && <Badge variant="danger">必填</Badge>}
-                      <Badge variant="default">{field.type}</Badge>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">编辑</Button>
-                  <Button variant="ghost" size="sm">删除</Button>
+              {fields.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-8">
+                  暂无字段，从左侧字段库添加
                 </div>
-              ))}
-              <Button variant="secondary" size="sm" className="w-full"><Plus className="w-3.5 h-3.5" /> 添加字段</Button>
+              ) : (
+                fields.map((field, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 border border-border rounded-lg">
+                    <GripVertical className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{field.label}</span>
+                        {field.required && <Badge variant="danger">必填</Badge>}
+                        <Badge variant="default">{field.type}</Badge>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const newLabel = prompt('字段名称', field.label)
+                        if (newLabel !== null) {
+                          setFields((prev) => prev.map((p, idx) => idx === i ? { ...p, label: newLabel } : p))
+                        }
+                      }}
+                    >编辑</Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (!confirm('确认删除该字段？')) return
+                        setFields((prev) => prev.filter((_, idx) => idx !== i))
+                      }}
+                    >删除</Button>
+                  </div>
+                ))
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setFields((prev) => [...prev, { label: '新字段', type: '单行文本', required: false }])}
+              >
+                <Plus className="w-3.5 h-3.5" /> 添加字段
+              </Button>
             </div>
           </Card>
         </div>

@@ -11,14 +11,21 @@ export class CmsService {
   }
 
   async createCollection(siteId: string, data: { type: string; name: string; fieldsSchema?: any }) {
-    return this.prisma.collection.create({ data: { siteId, slug: data.name, ...data, fieldsSchema: data.fieldsSchema || {} } as any })
+    return this.prisma.collection.create({
+      data: { siteId, type: data.type as any, name: data.name, slug: data.name, fieldsSchema: data.fieldsSchema || {} } as any,
+    })
   }
 
   // ========== 内容条目 ==========
   async listContents(siteId: string, collectionId?: string, status?: string) {
-    const where: any = { siteId }
+    // Content 表无 siteId，通过 collection 关联查询
+    const collections = await this.prisma.collection.findMany({ where: { siteId }, select: { id: true } })
+    const collectionIds = collections.map(c => c.id)
+    if (collectionIds.length === 0) return []
+
+    const where: any = { collectionId: { in: collectionIds } }
     if (collectionId) where.collectionId = collectionId
-    if (status) where.status = status
+    if (status) where.status = status as any
     return this.prisma.content.findMany({ where, orderBy: { updatedAt: 'desc' } })
   }
 
@@ -27,21 +34,36 @@ export class CmsService {
   }
 
   async createContent(data: {
-    siteId: string
     collectionId: string
     title: string
     slug: string
-    summary?: string
     fields?: any
     status?: string
-    coverImage?: string
-    meta?: any
   }) {
-    return this.prisma.content.create({ data: { ...data, status: (data.status as any) || 'DRAFT' } })
+    // Content 表只有 collectionId/slug/title/fields/status/seoMeta/geoMeta/author/publishedAt
+    return this.prisma.content.create({
+      data: {
+        collectionId: data.collectionId,
+        title: data.title,
+        slug: data.slug,
+        fields: data.fields || {},
+        status: (data.status as any) || 'DRAFT',
+      } as any,
+    })
   }
 
   async updateContent(id: string, data: any) {
-    return this.prisma.content.update({ where: { id }, data })
+    // 只更新 Content 表有的字段
+    const allowed: any = {}
+    if (data.title !== undefined) allowed.title = data.title
+    if (data.slug !== undefined) allowed.slug = data.slug
+    if (data.fields !== undefined) allowed.fields = data.fields
+    if (data.status !== undefined) allowed.status = data.status as any
+    if (data.seoMeta !== undefined) allowed.seoMeta = data.seoMeta
+    if (data.geoMeta !== undefined) allowed.geoMeta = data.geoMeta
+    if (data.author !== undefined) allowed.author = data.author
+    if (data.publishedAt !== undefined) allowed.publishedAt = data.publishedAt
+    return this.prisma.content.update({ where: { id }, data: allowed })
   }
 
   async deleteContent(id: string) {
@@ -50,30 +72,62 @@ export class CmsService {
 
   // ========== 页面 ==========
   async listPages(siteId: string) {
-    return this.prisma.page.findMany({ where: { siteId }, orderBy: { createdAt: 'asc' } })
+    return this.prisma.page.findMany({ where: { siteId }, orderBy: { sortOrder: 'asc' }, include: { blocks: { orderBy: { sortOrder: 'asc' } } } })
   }
 
   async getPage(id: string) {
-    return this.prisma.page.findUnique({ where: { id } })
+    return this.prisma.page.findUnique({ where: { id }, include: { blocks: { orderBy: { sortOrder: 'asc' } } } })
   }
 
   async createPage(data: {
     siteId: string
-    url: string
+    slug: string
     title: string
     type?: string
-    blocks?: any
     seoMeta?: any
   }) {
-    return this.prisma.page.create({ data: { slug: data.url, ...data, blocks: data.blocks || [], seoMeta: data.seoMeta || {} } as any })
+    // Page 表有 siteId/slug/title/type/seoMeta/status/sortOrder，blocks 是独立表
+    return this.prisma.page.create({
+      data: {
+        siteId: data.siteId,
+        slug: data.slug,
+        title: data.title,
+        type: (data.type as any) || 'CUSTOM',
+        seoMeta: data.seoMeta || {},
+      } as any,
+    })
   }
 
   async updatePage(id: string, data: any) {
-    return this.prisma.page.update({ where: { id }, data })
+    const allowed: any = {}
+    if (data.title !== undefined) allowed.title = data.title
+    if (data.slug !== undefined) allowed.slug = data.slug
+    if (data.type !== undefined) allowed.type = data.type as any
+    if (data.seoMeta !== undefined) allowed.seoMeta = data.seoMeta
+    if (data.status !== undefined) allowed.status = data.status as any
+    if (data.sortOrder !== undefined) allowed.sortOrder = data.sortOrder
+    return this.prisma.page.update({ where: { id }, data: allowed })
   }
 
   async deletePage(id: string) {
     return this.prisma.page.delete({ where: { id } })
+  }
+
+  // ========== 区块 ==========
+  async listBlocks(pageId: string) {
+    return this.prisma.block.findMany({ where: { pageId }, orderBy: { sortOrder: 'asc' } })
+  }
+
+  async createBlock(data: { pageId: string; type: string; props?: any; sortOrder?: number }) {
+    return this.prisma.block.create({ data: { pageId: data.pageId, type: data.type, props: data.props || {}, sortOrder: data.sortOrder || 0 } })
+  }
+
+  async updateBlock(id: string, data: any) {
+    return this.prisma.block.update({ where: { id }, data })
+  }
+
+  async deleteBlock(id: string) {
+    return this.prisma.block.delete({ where: { id } })
   }
 
   // ========== 导航 ==========

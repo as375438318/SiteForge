@@ -1,42 +1,120 @@
-import { Card, CardHeader, CardTitle, Button, Textarea, Badge, Alert, CodeBlock, Toggle, Label } from '@/components/ui'
+import { Card, CardHeader, CardTitle, Button, Textarea, Badge, Alert, Toggle, Label, EmptyState } from '@/components/ui'
 import { toast } from '@/stores/toast'
-import { RefreshCw, Download } from 'lucide-react'
-import { useState } from 'react'
+import { RefreshCw, Download, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { apiClient, ApiError } from '@/lib/api'
 
-const defaultLlmsTxt = `# 智云科技
-
-> 专注企业数字化转型与AI应用
-
-## 主要内容
-
-- 产品服务: https://www.zhiyun-tech.com/products - 提供专业的产品和服务解决方案
-- 成功案例: https://www.zhiyun-tech.com/cases - 服务客户的成功案例展示
-- 关于我们: https://www.zhiyun-tech.com/about - 公司简介与团队介绍
-- 联系方式: https://www.zhiyun-tech.com/contact - 联系方式与在线咨询
-
-## 核心资源
-
-- 企业数字化转型指南: https://www.zhiyun-tech.com/posts/digital-transformation - 2025年企业数字化转型的关键步骤
-
-## 补充说明
-
-智云科技致力于为企业提供专业的数字化转型方案，拥有200+成功案例，服务覆盖制造业、零售、教育等多个行业。`
+interface Site {
+  id: string
+  name?: string
+  domain?: string
+  description?: string
+}
 
 export default function GeoLlmsTxt() {
-  const [content, setContent] = useState(defaultLlmsTxt)
+  const [content, setContent] = useState('')
   const [autoUpdate, setAutoUpdate] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [site, setSite] = useState<Site | null>(null)
+  const [initLoading, setInitLoading] = useState(true)
+  const [initError, setInitError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setInitLoading(true)
+      setInitError(null)
+      try {
+        const sitesRes = await apiClient.get<Site[] | { items?: Site[] }>('/sites')
+        if (cancelled) return
+        const list = Array.isArray(sitesRes) ? sitesRes : (sitesRes as { items?: Site[] })?.items || []
+        const s = list.length > 0 ? list[0] : { id: 'default' }
+        setSite(s)
+        // 站点信息填充为 llms.txt 默认内容
+        setContent(buildDefaultLlmsTxt(s))
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+        setInitError(e instanceof Error ? e.message : '加载失败')
+      } finally {
+        if (!cancelled) setInitLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function buildDefaultLlmsTxt(s: Site): string {
+    const name = s.name || '我的站点'
+    const domain = s.domain || ''
+    const desc = s.description || ''
+    return `# ${name}\n\n> ${desc}\n\n## 主要内容\n\n- 主页: ${domain ? `https://${domain}/` : '/'} - ${name}\n`
+  }
 
   async function regenerate() {
+    if (!site) return
     setLoading(true)
     try {
-      const site = { name: '智云科技', domain: 'www.zhiyun-tech.com', description: '专注企业数字化转型与AI应用', pages: [{ title: '产品服务', url: '/products', summary: '产品解决方案' }, { title: '关于我们', url: '/about', summary: '公司简介' }, { title: '联系我们', url: '/contact', summary: '联系方式' }] }
-      const res = await fetch('/api/geo/llms-txt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(site) })
-      const data = await res.json()
-      setContent(data.llmsTxt)
+      const data = await apiClient.post<{ llmsTxt?: string; content?: string }>('/geo/llms-txt', {
+        site: {
+          id: site.id,
+          name: site.name || '',
+          domain: site.domain || '',
+          description: site.description || '',
+          pages: [],
+        },
+      })
+      if (data?.llmsTxt) setContent(data.llmsTxt)
+      else if (data?.content) setContent(data.content)
       toast.success('llms.txt 已重新生成')
-    } catch { toast.error('生成失败') }
-    setLoading(false)
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+      toast.error('生成失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function publish() {
+    if (!site) return
+    setPublishing(true)
+    try {
+      await apiClient.post('/ssg/generate', { site: { ...site, llmsTxt: content } })
+      toast.success('已保存并发布')
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+      toast.error('发布失败')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  function download() {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'llms.txt'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('已下载')
+  }
+
+  if (initLoading) {
+    return <div className="p-8 text-center text-muted-foreground">加载中...</div>
+  }
+  if (initError) {
+    return <EmptyState icon={<AlertCircle className="w-10 h-10" />} title="加载失败" description={initError} />
   }
 
   return (
@@ -46,8 +124,8 @@ export default function GeoLlmsTxt() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">发布时自动更新</span><Toggle checked={autoUpdate} onChange={setAutoUpdate} /></div>
           <Button variant="secondary" onClick={regenerate} disabled={loading}><RefreshCw className="w-4 h-4" /> {loading ? '生成中...' : '重新生成'}</Button>
-          <Button variant="secondary" onClick={() => toast.success('已下载')}><Download className="w-4 h-4" /> 下载</Button>
-          <Button onClick={() => toast.success('已保存并发布')}>保存并发布</Button>
+          <Button variant="secondary" onClick={download}><Download className="w-4 h-4" /> 下载</Button>
+          <Button onClick={publish} disabled={publishing}>{publishing ? '发布中...' : '保存并发布'}</Button>
         </div>
       </div>
 
@@ -64,7 +142,7 @@ export default function GeoLlmsTxt() {
               <div><Label>数据来源</Label><div className="text-muted-foreground">自动从站点配置、页面摘要、内容列表聚合生成</div></div>
               <div><Label>自动更新机制</Label><div className="text-muted-foreground">每次发布站点时自动重新生成</div></div>
               <div><Label>合规说明</Label><div className="text-muted-foreground">仅包含公开内容，不含用户数据</div></div>
-              <div><Label>规范</Label><a className="text-primary text-xs" href="https://llmld.org" target="_blank">llmld.org ↗</a></div>
+              <div><Label>规范</Label><a className="text-primary text-xs" href="https://llmld.org" target="_blank" rel="noreferrer">llmld.org ↗</a></div>
             </div>
           </Card>
 

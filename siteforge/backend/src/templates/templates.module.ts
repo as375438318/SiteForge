@@ -1,4 +1,4 @@
-import { Module, Controller, Get } from '@nestjs/common'
+import { Module, Controller, Get, Param } from '@nestjs/common'
 
 const TEMPLATES = [
   { id: 'tpl_1', name: '简约商务', industry: '科技互联网', colors: ['#4f46e5', '#ffffff'], blocks: 12 },
@@ -11,10 +11,10 @@ const TEMPLATES = [
   { id: 'tpl_8', name: '创意设计', industry: '设计创意', colors: ['#ec4899', '#fdf2f8'], blocks: 14 },
 ]
 
-@Controller('api/templates')
+@Controller('templates')
 class TemplatesController {
   @Get() list() { return TEMPLATES }
-  @Get(':id') get(id: string) { return TEMPLATES.find(t => t.id === id) }
+  @Get(':id') get(@Param('id') id: string) { return TEMPLATES.find(t => t.id === id) }
 }
 
 @Module({ controllers: [TemplatesController] })

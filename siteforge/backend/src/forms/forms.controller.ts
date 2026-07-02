@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common'
 import { FormsService } from './forms.service'
 
-@Controller('api/forms')
+@Controller('forms')
 export class FormsController {
   constructor(private readonly forms: FormsService) {}
 

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common'
 import { CmsService } from './cms.service'
 
-@Controller('api/cms')
+@Controller('cms')
 export class CmsController {
   constructor(private readonly cms: CmsService) {}
 

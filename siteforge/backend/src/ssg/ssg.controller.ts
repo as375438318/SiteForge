@@ -1,7 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common'
 import { SsgService } from './ssg.service'
 
-@Controller('api/ssg')
+@Controller('ssg')
 export class SsgController {
   constructor(private readonly ssg: SsgService) {}
 

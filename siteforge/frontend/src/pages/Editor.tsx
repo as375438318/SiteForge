@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, DragEvent } from 'react'
 import { Button, Input, Select, Label, Badge, Textarea } from '@/components/ui'
 import { toast } from '@/stores/toast'
 import { useEditorStore, Block, Viewport } from '@/stores/editor'
+import { apiClient, ApiError } from '@/lib/api'
 import {
   MousePointerClick, Save, Undo, Redo, Eye, Rocket,
   Trash2, ArrowUp, ArrowDown, Monitor, Tablet, Smartphone,
@@ -56,6 +57,33 @@ export default function Editor() {
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [iframeKey, setIframeKey] = useState(0)
   const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [pageId, setPageId] = useState<string>('')
+
+  // 加载已有页面（如果有 id）
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const sitesRes = await apiClient.get<{ id: string }[] | { items?: { id: string }[] }>('/sites')
+        const sitesList = Array.isArray(sitesRes) ? sitesRes : (sitesRes as { items?: { id: string }[] })?.items
+        if (cancelled || !sitesList || sitesList.length === 0) return
+        const sid = sitesList[0].id
+        const pagesRes = await apiClient.get<{ id?: string }[] | { items?: { id?: string }[] }>(`/cms/pages/${sid}`)
+        const pagesList = Array.isArray(pagesRes) ? pagesRes : (pagesRes as { items?: { id?: string }[] })?.items
+        if (cancelled || !pagesList || pagesList.length === 0) return
+        if (pagesList[0].id) setPageId(pagesList[0].id)
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          window.location.href = '/login'
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Drag state
   const dragFromLibrary = useRef<string | null>(null)
@@ -113,15 +141,27 @@ export default function Editor() {
   const doSave = useCallback(async () => {
     setSaving(true)
     try {
-      // Simulated save request — replace with real API when available
-      await new Promise((r) => setTimeout(r, 400))
+      const pagePayload = {
+        ...buildPage(),
+        blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })),
+      }
+      if (pageId) {
+        await apiClient.put(`/cms/page/${pageId}`, pagePayload)
+      } else {
+        const res = await apiClient.post<{ id?: string }>('/cms/page', pagePayload)
+        if (res?.id) setPageId(res.id)
+      }
       setSaved(true)
-    } catch {
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        window.location.href = '/login'
+        return
+      }
       toast.error('保存失败')
     } finally {
       setSaving(false)
     }
-  }, [setSaved, setSaving])
+  }, [setSaved, setSaving, pageId, blocks, buildPage])
 
   const handleManualSave = useCallback(() => {
     doSave().then(() => toast.success('已保存'))
@@ -299,8 +339,23 @@ export default function Editor() {
           <Button size="sm" onClick={handleManualSave} disabled={saving}>
             <Save className="w-3.5 h-3.5" /> {saving ? '保存中' : '保存'}
           </Button>
-          <Button size="sm" onClick={() => toast.success('发布中...')}>
-            <Rocket className="w-3.5 h-3.5" /> 发布
+          <Button size="sm" onClick={async () => {
+            if (publishing) return
+            setPublishing(true)
+            try {
+              await apiClient.post('/ssg/generate', { site: buildSite() })
+              toast.success('已发布')
+            } catch (e) {
+              if (e instanceof ApiError && e.status === 401) {
+                window.location.href = '/login'
+                return
+              }
+              toast.error('发布失败')
+            } finally {
+              setPublishing(false)
+            }
+          }} disabled={publishing}>
+            <Rocket className="w-3.5 h-3.5" /> {publishing ? '发布中...' : '发布'}
           </Button>
         </div>
 

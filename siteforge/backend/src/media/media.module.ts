@@ -1,7 +1,7 @@
 import { Module, Controller, Get, Post, Delete, Body, Param } from '@nestjs/common'
 import { PrismaService } from '@/prisma/prisma.service'
 
-@Controller('api/media')
+@Controller('media')
 class MediaController {
   constructor(private prisma: PrismaService) {}
   @Get(':siteId') list(@Param('siteId') siteId: string) { return this.prisma.media.findMany({ where: { siteId } }) }

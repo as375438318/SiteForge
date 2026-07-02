@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Wand2, Link as LinkIcon, ShieldCheck, Loader2, CheckCircle2, ArrowRight,
-  ArrowLeft, FileCode, Layers, Eye, ChevronRight, RotateCcw,
+  ArrowLeft, FileCode, Layers, Eye, ChevronRight, RotateCcw, AlertCircle,
 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, Button, Input, Alert, Progress, Badge } from '@/components/ui'
+import { Card, CardHeader, CardTitle, Button, Input, Alert, Progress, Badge, EmptyState } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { toast } from '@/stores/toast'
 
@@ -31,17 +31,6 @@ interface ParseResult {
   pages: PageInfo[]
 }
 
-const MOCK_RESULT: ParseResult = {
-  site: 'https://example-competitor.com',
-  pages: [
-    { path: '/', title: '首页', blocks: [{ type: 'hero', name: '主视觉' }, { type: 'features', name: '核心特性' }, { type: 'logos', name: '客户标识' }, { type: 'cta', name: '行动召唤' }, { type: 'footer', name: '页脚' }] },
-    { path: '/products', title: '产品', blocks: [{ type: 'breadcrumb', name: '面包屑' }, { type: 'grid', name: '产品网格' }, { type: 'compare', name: '对比表' }] },
-    { path: '/pricing', title: '定价', blocks: [{ type: 'tier', name: '定价阶梯' }, { type: 'faq', name: '常见问题' }] },
-    { path: '/about', title: '关于我们', blocks: [{ type: 'story', name: '品牌故事' }, { type: 'team', name: '团队介绍' }] },
-    { path: '/contact', title: '联系我们', blocks: [{ type: 'form', name: '联系表单' }, { type: 'map', name: '地图' }] },
-  ],
-}
-
 export default function Parse() {
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
@@ -49,6 +38,7 @@ export default function Parse() {
   const [stageIdx, setStageIdx] = useState(-1)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<ParseResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [selectedPage, setSelectedPage] = useState<string | null>(null)
 
   const startParse = async () => {
@@ -63,35 +53,33 @@ export default function Parse() {
     setStep(2)
     setRunning(true)
     setStageIdx(0)
+    setError(null)
 
     // Simulate stage progression
     for (let i = 0; i < STAGES.length; i++) {
       setStageIdx(i)
-      // simulate stage time
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 700))
     }
 
-    // Real API call (with mock fallback so UI always works)
     try {
       const res = await fetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        setResult(data)
-      } else {
-        setResult(MOCK_RESULT)
+      if (!res.ok) {
+        throw new Error(`解析失败：${res.status}`)
       }
-    } catch {
-      // Backend unavailable: fall back to mock data
-      setResult({ ...MOCK_RESULT, site: url })
+      const data = await res.json()
+      setResult(data)
+      toast.success(`解析完成，已生成 ${(data?.pages?.length || 0)} 个页面骨架`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '解析失败')
+      toast.error('解析失败')
     }
     setRunning(false)
     setStep(3)
-    toast.success('解析完成，已生成 5 个页面骨架')
   }
 
   const reset = () => {
@@ -100,6 +88,7 @@ export default function Parse() {
     setResult(null)
     setStageIdx(-1)
     setSelectedPage(null)
+    setError(null)
   }
 
   return (
@@ -205,6 +194,23 @@ export default function Parse() {
               })}
             </div>
           </div>
+        </Card>
+      )}
+
+      {/* Step 3: Result */}
+      {step === 3 && !result && (
+        <Card>
+          <CardHeader>
+            <CardTitle>解析失败</CardTitle>
+            <Button variant="secondary" size="sm" onClick={reset}>
+              <RotateCcw className="w-3.5 h-3.5" /> 重新解析
+            </Button>
+          </CardHeader>
+          <EmptyState
+            icon={<AlertCircle className="w-10 h-10" />}
+            title="解析失败"
+            description={error || '后端服务不可用，请稍后再试'}
+          />
         </Card>
       )}
 

@@ -1,29 +1,98 @@
-import { useState } from 'react'
-import { Card, CardHeader, CardTitle, StatCard, Button, Table, Th, Td, Badge } from '@/components/ui'
+import { useEffect, useState } from 'react'
+import { Card, CardHeader, CardTitle, StatCard, Button, EmptyState } from '@/components/ui'
 import ReactECharts from 'echarts-for-react'
+import { apiClient, ApiError } from '@/lib/api'
+import { AlertCircle } from 'lucide-react'
+
+interface Site {
+  id: string
+  name?: string
+}
+interface SeoHealthResponse {
+  score?: number
+  passed?: number
+  warnings?: number
+  failed?: number
+  checks?: { name: string; status: 'pass' | 'warning' | 'fail' }[]
+}
 
 export default function AnalyticsTraffic() {
   const [period, setPeriod] = useState('7日')
+  const [health, setHealth] = useState<SeoHealthResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        let sid = 'default'
+        let siteName = ''
+        try {
+          const sitesRes = await apiClient.get<Site[] | { items?: Site[] }>('/sites')
+          const sitesList = Array.isArray(sitesRes) ? sitesRes : (sitesRes as { items?: Site[] })?.items
+          if (sitesList && sitesList.length > 0) {
+            sid = sitesList[0].id
+            siteName = sitesList[0].name || ''
+          }
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) {
+            window.location.href = '/login'
+            return
+          }
+        }
+        if (cancelled) return
+
+        const data = await apiClient.post<SeoHealthResponse>('/seo/health-check', {
+          site: { id: sid, name: siteName },
+          pages: [],
+        })
+        if (cancelled) return
+        setHealth(data)
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+        setError(e instanceof Error ? e.message : '加载失败')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 用 SEO 检查数据填充图表
+  const checkStatusCount = (status: 'pass' | 'warning' | 'fail') =>
+    health?.checks?.filter((c) => c.status === status).length || 0
 
   const trafficOption = {
     tooltip: { trigger: 'axis' },
     grid: { left: 40, right: 20, top: 20, bottom: 30 },
-    xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] },
+    xAxis: { type: 'category', data: ['通过', '警告', '未通过'] },
     yAxis: { type: 'value' },
-    series: [{ data: [420, 580, 390, 650, 720, 580, 507], type: 'line', smooth: true, areaStyle: { opacity: 0.15 }, itemStyle: { color: '#4f46e5' } }],
+    series: [{
+      data: [checkStatusCount('pass'), checkStatusCount('warning'), checkStatusCount('fail')],
+      type: 'bar',
+      barWidth: '50%',
+      itemStyle: { color: '#4f46e5' },
+    }],
   }
 
   const sourceOption = {
     tooltip: { trigger: 'item' },
     legend: { bottom: 0 },
     series: [{
-      type: 'pie', radius: ['40%', '70%'],
+      type: 'pie',
+      radius: ['40%', '70%'],
       data: [
-        { value: 1540, name: '搜索引擎', itemStyle: { color: '#4f46e5' } },
-        { value: 980, name: '直接访问', itemStyle: { color: '#3b82f6' } },
-        { value: 620, name: '社交媒体', itemStyle: { color: '#22c55e' } },
-        { value: 350, name: 'AI搜索', itemStyle: { color: '#eab308' } },
-        { value: 357, name: '其他', itemStyle: { color: '#94a3b8' } },
+        { value: checkStatusCount('pass'), name: '通过', itemStyle: { color: '#22c55e' } },
+        { value: checkStatusCount('warning'), name: '警告', itemStyle: { color: '#eab308' } },
+        { value: checkStatusCount('fail'), name: '未通过', itemStyle: { color: '#ef4444' } },
       ],
     }],
   }
@@ -31,7 +100,7 @@ export default function AnalyticsTraffic() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-2xl font-bold">访问统计</h1><p className="text-sm text-muted-foreground">网站访问数据分析</p></div>
+        <div><h1 className="text-2xl font-bold">访问统计</h1><p className="text-sm text-muted-foreground">基于 SEO 健康度数据展示</p></div>
         <div className="flex gap-1">
           {['今日', '7日', '30日'].map(p => (
             <Button key={p} size="sm" variant={period === p ? 'primary' : 'secondary'} onClick={() => setPeriod(p)}>{p}</Button>
@@ -39,38 +108,51 @@ export default function AnalyticsTraffic() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard label="总访问量" value="3,847" delta="12%" deltaType="up" />
-        <StatCard label="独立访客" value="1,203" delta="8%" deltaType="up" />
-        <StatCard label="跳出率" value="42%" delta="3%" deltaType="down" />
-        <StatCard label="平均停留" value="2分18秒" delta="15%" deltaType="up" />
-      </div>
+      {loading ? (
+        <div className="p-8 text-center text-muted-foreground">加载中...</div>
+      ) : error ? (
+        <EmptyState icon={<AlertCircle className="w-10 h-10" />} title="加载失败" description={error} />
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <StatCard label="SEO 健康度" value={health?.score ?? 0} />
+            <StatCard label="通过项" value={checkStatusCount('pass')} />
+            <StatCard label="警告项" value={checkStatusCount('warning')} />
+            <StatCard label="未通过项" value={checkStatusCount('fail')} />
+          </div>
 
-      <div className="grid grid-cols-[1fr_400px] gap-5 mb-6">
-        <Card><CardHeader><CardTitle>访问趋势</CardTitle></CardHeader><ReactECharts option={trafficOption} style={{ height: 300 }} /></Card>
-        <Card><CardHeader><CardTitle>来源渠道</CardTitle></CardHeader><ReactECharts option={sourceOption} style={{ height: 300 }} /></Card>
-      </div>
+          <div className="grid grid-cols-[1fr_400px] gap-5 mb-6">
+            <Card><CardHeader><CardTitle>检查项分布</CardTitle></CardHeader><ReactECharts option={trafficOption} style={{ height: 300 }} /></Card>
+            <Card><CardHeader><CardTitle>状态占比</CardTitle></CardHeader><ReactECharts option={sourceOption} style={{ height: 300 }} /></Card>
+          </div>
 
-      <Card className="mb-4">
-        <CardHeader><CardTitle>热门页面 Top 10</CardTitle></CardHeader>
-        <Table>
-          <thead><tr><Th>排名</Th><Th>页面</Th><Th>访问量</Th><Th>占比</Th></tr></thead>
-          <tbody>
-            {[{ p: '/', v: 1542, pct: '40%' }, { p: '/products', v: 876, pct: '23%' }, { p: '/about', v: 523, pct: '14%' }, { p: '/contact', v: 387, pct: '10%' }, { p: '/posts/geo-guide', v: 256, pct: '7%' }].map((r, i) => (
-              <tr key={i} className="hover:bg-muted/50"><Td>{i + 1}</Td><Td className="font-medium">{r.p}</Td><Td>{r.v}</Td><Td className="text-muted-foreground">{r.pct}</Td></tr>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>设备分布</CardTitle></CardHeader>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="text-center p-4 bg-muted/50 rounded-lg"><div className="text-2xl font-bold">60%</div><div className="text-sm text-muted-foreground">🖥️ PC</div></div>
-          <div className="text-center p-4 bg-muted/50 rounded-lg"><div className="text-2xl font-bold">35%</div><div className="text-sm text-muted-foreground">📱 移动</div></div>
-          <div className="text-center p-4 bg-muted/50 rounded-lg"><div className="text-2xl font-bold">5%</div><div className="text-sm text-muted-foreground">📱 平板</div></div>
-        </div>
-      </Card>
+          <Card className="mb-4">
+            <CardHeader><CardTitle>检查项明细</CardTitle></CardHeader>
+            {health?.checks && health.checks.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-left px-4 py-3 bg-muted font-semibold text-muted-foreground">检查项</th>
+                      <th className="text-left px-4 py-3 bg-muted font-semibold text-muted-foreground">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {health.checks.map((c, i) => (
+                      <tr key={i} className="hover:bg-muted/50">
+                        <td className="px-4 py-3 border-t border-border font-medium">{c.name}</td>
+                        <td className="px-4 py-3 border-t border-border text-muted-foreground">{c.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title="暂无检查数据" description="运行 SEO 健康检查后将显示" />
+            )}
+          </Card>
+        </>
+      )}
     </div>
   )
 }

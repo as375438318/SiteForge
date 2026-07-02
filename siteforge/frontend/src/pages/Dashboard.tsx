@@ -1,43 +1,49 @@
 import { useEffect, useState, type ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  TrendingUp, FileText, Bot, Inbox, Wand2, LayoutGrid, FilePlus2,
-  ArrowRight, AlertCircle, CheckCircle2, Clock, Search, MessageSquare,
-  Rocket, FileCode, Settings,
+  TrendingUp, Inbox, Wand2, LayoutGrid, FilePlus2,
+  ArrowRight, AlertCircle, CheckCircle2, Clock, Search, Settings,
 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, StatCard, Badge, Button } from '@/components/ui'
+import { Card, CardHeader, CardTitle, StatCard, Badge, Button, EmptyState } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { apiClient, ApiError } from '@/lib/api'
 
-interface DashboardStats {
-  svi?: number
-  sviDelta?: string
-  indexedPages?: number
-  indexedPagesDelta?: string
-  citationScore?: number
-  citationScoreDelta?: string
-  leads7d?: number
-  leads7dDelta?: string
+interface Site {
+  id: string
+  name?: string
+  domain?: string
 }
-interface DashboardActivity {
-  icon?: string
-  color?: string
+interface SeoHealthResponse {
+  score?: number
+  passed?: number
+  warnings?: number
+  failed?: number
+  checks?: { name: string; status: 'pass' | 'warning' | 'fail'; detail?: string }[]
+}
+interface LeadsSummary {
+  pending?: number
+}
+
+interface StatItem {
+  label: string
+  value: number | string
+  delta?: string
+  deltaType?: 'up' | 'down'
+}
+interface TodoItem {
+  label: string
+  count: number
+  icon: ComponentType<{ className?: string }>
+  color: string
+  to: string
+}
+interface ActivityItem {
+  icon: ComponentType<{ className?: string }>
+  color: string
   title: string
   desc: string
   time: string
 }
-interface DashboardData {
-  stats?: DashboardStats
-  activities?: DashboardActivity[]
-  todos?: { label: string; count: number; icon: string; color: string; to: string }[]
-}
-
-const defaultStats = [
-  { label: 'SVI 指数', value: 72, delta: '5.2', deltaType: 'up' as const },
-  { label: '收录页面', value: 87, delta: '4', deltaType: 'up' as const },
-  { label: '可引用性均分', value: 64, delta: '2.1', deltaType: 'up' as const },
-  { label: '近 7 天线索', value: 23, delta: '8', deltaType: 'up' as const },
-]
 
 const entries = [
   {
@@ -63,68 +69,92 @@ const entries = [
   },
 ]
 
-const defaultTodos = [
-  { label: 'SEO 未通过项', count: 3, icon: Search, color: 'text-warning', to: '/seo/health' },
-  { label: '未处理线索', count: 5, icon: Inbox, color: 'text-destructive', to: '/leads' },
-  { label: '未配置 LLM API', count: 1, icon: Settings, color: 'text-blue-500', to: '/system/llm' },
-]
-
-const defaultActivities = [
-  { icon: Rocket, color: 'text-success', title: '发布了静态站点', desc: '生成 87 个页面，已部署至 CDN', time: '10 分钟前' },
-  { icon: FileText, color: 'text-blue-500', title: '发布了文章《2024 SaaS 趋势》', desc: 'GEO 评分 78，可引用性良好', time: '2 小时前' },
-  { icon: Bot, color: 'text-purple-500', title: '生成了 llms.txt', desc: '6 个页面已写入 AI 引用档案', time: '今天 09:12' },
-  { icon: MessageSquare, color: 'text-warning', title: '收到 3 条新线索', desc: '来自「产品咨询」表单', time: '昨天 18:30' },
-  { icon: FileCode, color: 'text-muted-foreground', title: '新增页面 /pricing', desc: '已配置 SEO TDK 与结构化数据', time: '昨天 14:05' },
-]
-
-const activityIconMap: Record<string, ComponentType<{ className?: string }>> = {
-  Rocket, FileText, Bot, MessageSquare, FileCode,
-}
-
-type ActivityItem = {
-  icon: ComponentType<{ className?: string }>
-  color: string
-  title: string
-  desc: string
-  time: string
-}
-
 export default function Dashboard() {
-  const [stats, setStats] = useState(defaultStats)
-  const [todos, setTodos] = useState(defaultTodos)
-  const [activities, setActivities] = useState<ActivityItem[]>(defaultActivities)
+  const [stats, setStats] = useState<StatItem[]>([])
+  const [todos, setTodos] = useState<TodoItem[]>([])
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      setLoading(true)
+      setError(null)
       try {
-        const data = await apiClient.get<DashboardData>('/dashboard')
+        // 1. 获取站点
+        let siteId = 'default'
+        let siteName = '工作台'
+        try {
+          const sitesRes = await apiClient.get<Site[] | { items?: Site[] }>('/sites')
+          const sitesList = Array.isArray(sitesRes) ? sitesRes : (sitesRes as { items?: Site[] })?.items
+          if (sitesList && sitesList.length > 0) {
+            siteId = sitesList[0].id || siteId
+            siteName = sitesList[0].name || siteName
+          }
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) {
+            window.location.href = '/login'
+            return
+          }
+          // 站点接口失败时使用 default
+        }
+
+        // 2. 并行获取 SEO 健康度 + 线索摘要
+        const [seoRes, leadsRes] = await Promise.allSettled([
+          apiClient.post<SeoHealthResponse>('/seo/health-check', {
+            site: { id: siteId, name: siteName },
+            pages: [],
+          }),
+          apiClient.get<LeadsSummary[] | { items?: LeadsSummary[] }>(`/leads/${siteId}`),
+        ])
+
         if (cancelled) return
-        if (data?.stats) {
-          setStats([
-            { label: 'SVI 指数', value: data.stats.svi ?? defaultStats[0].value, delta: data.stats.sviDelta ?? defaultStats[0].delta, deltaType: 'up' },
-            { label: '收录页面', value: data.stats.indexedPages ?? defaultStats[1].value, delta: data.stats.indexedPagesDelta ?? defaultStats[1].delta, deltaType: 'up' },
-            { label: '可引用性均分', value: data.stats.citationScore ?? defaultStats[2].value, delta: data.stats.citationScoreDelta ?? defaultStats[2].delta, deltaType: 'up' },
-            { label: '近 7 天线索', value: data.stats.leads7d ?? defaultStats[3].value, delta: data.stats.leads7dDelta ?? defaultStats[3].delta, deltaType: 'up' },
-          ])
+
+        const seo = seoRes.status === 'fulfilled' ? seoRes.value : undefined
+        const leadsList =
+          leadsRes.status === 'fulfilled'
+            ? Array.isArray(leadsRes.value)
+              ? leadsRes.value
+              : (leadsRes.value as { items?: LeadsSummary[] })?.items || []
+            : []
+
+        const pendingLeads = leadsList.length
+
+        const statItems: StatItem[] = []
+        if (seo?.score !== undefined) {
+          statItems.push({ label: 'SEO 健康度', value: seo.score, delta: '', deltaType: 'up' })
         }
-        if (data?.activities?.length) {
-          setActivities(
-            data.activities.map((a) => ({
-              icon: (a.icon && activityIconMap[a.icon]) || FileText,
-              color: a.color || 'text-muted-foreground',
-              title: a.title,
-              desc: a.desc,
-              time: a.time,
-            })),
-          )
+        if (seo?.passed !== undefined) {
+          statItems.push({ label: '检查通过项', value: seo.passed, delta: '', deltaType: 'up' })
         }
+        if (seo?.warnings !== undefined) {
+          statItems.push({ label: '警告项', value: seo.warnings, delta: '', deltaType: 'down' })
+        }
+        statItems.push({ label: '线索总数', value: pendingLeads, delta: '', deltaType: 'up' })
+        setStats(statItems)
+
+        // 待办：基于真实数据
+        const todoItems: TodoItem[] = []
+        if (seo?.failed !== undefined && seo.failed > 0) {
+          todoItems.push({ label: 'SEO 未通过项', count: seo.failed, icon: Search, color: 'text-warning', to: '/seo/health' })
+        }
+        if (pendingLeads > 0) {
+          todoItems.push({ label: '未处理线索', count: pendingLeads, icon: Inbox, color: 'text-destructive', to: '/leads' })
+        }
+        todoItems.push({ label: '未配置 LLM API', count: 0, icon: Settings, color: 'text-blue-500', to: '/system/llm' })
+        setTodos(todoItems)
+
+        // 活动流：留空，后端暂无活动接口
+        setActivities([])
       } catch (e) {
-        // 后端未就绪或无数据，保留 mock 兜底
         if (e instanceof ApiError && e.status === 401) {
-          // 鉴权失败，跳登录
           window.location.href = '/login'
+          return
         }
+        setError(e instanceof Error ? e.message : '加载失败')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => {
@@ -137,15 +167,33 @@ export default function Dashboard() {
       {/* Page Title */}
       <div>
         <h1 className="text-2xl font-bold">工作台</h1>
-        <p className="text-sm text-muted-foreground mt-1">早上好，admin。今日有 {todos[1]?.count ?? 5} 条新线索待跟进。</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {loading ? '加载中...' : '欢迎回来，今日数据如下。'}
+        </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
-          <StatCard key={s.label} {...s} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="p-8 text-center text-muted-foreground">加载中...</div>
+      ) : error ? (
+        <EmptyState
+          icon={<AlertCircle className="w-10 h-10" />}
+          title="数据加载失败"
+          description={error}
+        />
+      ) : stats.length === 0 ? (
+        <EmptyState
+          icon={<TrendingUp className="w-10 h-10" />}
+          title="暂无统计数据"
+          description="站点配置或 SEO 检查完成后将显示数据"
+        />
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((s) => (
+            <StatCard key={s.label} {...s} />
+          ))}
+        </div>
+      )}
 
       {/* Entries */}
       <div>
@@ -176,26 +224,29 @@ export default function Dashboard() {
             <Badge variant="warning">{todos.reduce((a, b) => a + b.count, 0)}</Badge>
           </CardHeader>
           <div className="space-y-2">
-            {todos.map((t) => (
-              <Link
-                key={t.label}
-                to={t.to}
-                className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <t.icon className={cn('w-4 h-4', t.color)} />
-                  <span className="text-sm">{t.label}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={t.count > 2 ? 'danger' : 'warning'}>{t.count}</Badge>
-                  <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-                </div>
-              </Link>
-            ))}
-            <div className="flex items-center gap-2 p-3 text-xs text-success">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>其余 12 项检查均已通过</span>
-            </div>
+            {todos.length === 0 ? (
+              <div className="flex items-center gap-2 p-3 text-xs text-success">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>暂无待办事项</span>
+              </div>
+            ) : (
+              todos.map((t) => (
+                <Link
+                  key={t.label}
+                  to={t.to}
+                  className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <t.icon className={cn('w-4 h-4', t.color)} />
+                    <span className="text-sm">{t.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={t.count > 2 ? 'danger' : 'warning'}>{t.count}</Badge>
+                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         </Card>
 
@@ -206,25 +257,33 @@ export default function Dashboard() {
             <Button variant="ghost" size="sm">查看全部</Button>
           </CardHeader>
           <div className="space-y-4">
-            {activities.map((a, i) => (
-              <div key={i} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <div className={cn('w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0', a.color)}>
-                    <a.icon className="w-4 h-4" />
+            {activities.length === 0 ? (
+              <EmptyState
+                icon={<Clock className="w-8 h-8" />}
+                title="暂无活动记录"
+                description="发布内容、生成页面后将在此处显示"
+              />
+            ) : (
+              activities.map((a, i) => (
+                <div key={i} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className={cn('w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0', a.color)}>
+                      <a.icon className="w-4 h-4" />
+                    </div>
+                    {i < activities.length - 1 && <div className="w-px flex-1 bg-border my-1" />}
                   </div>
-                  {i < activities.length - 1 && <div className="w-px flex-1 bg-border my-1" />}
-                </div>
-                <div className="flex-1 pb-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{a.title}</span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {a.time}
-                    </span>
+                  <div className="flex-1 pb-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{a.title}</span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {a.time}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{a.desc}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{a.desc}</p>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
       </div>
