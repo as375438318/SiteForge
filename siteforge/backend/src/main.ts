@@ -1,6 +1,7 @@
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LicenseService } from './license/license.service';
@@ -12,10 +13,8 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  // 安全与中间件
   app.enableCors({ origin: '*', credentials: true });
 
-  // 全局管道
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -25,27 +24,33 @@ async function bootstrap() {
     }),
   );
 
-  // 全局过滤器
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // License 启动校验
+  // Swagger 文档
+  const docConfig = new DocumentBuilder()
+    .setTitle('SiteForge API')
+    .setDescription('AI 结构复刻 + SEO + GEO 企业官网搭建系统')
+    .setVersion('0.1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, docConfig);
+  SwaggerModule.setup('api/docs', app, document);
+  logger.log('Swagger 文档: /api/docs');
+
+  // License 校验
   const licenseService = app.get(LicenseService);
   try {
     const result = await licenseService.validateOnStartup();
-    if (result.valid) {
-      logger.log('License 校验通过');
-    } else {
-      logger.warn(`License 校验失败：${result.reason ?? '未知原因'} — 管理功能受限`);
-    }
+    if (result.valid) logger.log('License 校验通过');
+    else logger.warn(`License 校验失败：${result.reason ?? '未知原因'}`);
   } catch (err) {
     logger.error(`License 校验异常：${(err as Error).message}`);
   }
 
-  // 启动监听
   const port = Number.parseInt(config.get<string>('PORT', '3000'), 10);
   await app.listen(port);
-  logger.log(`SiteForge 后端已启动，监听端口 ${port}`);
-  logger.log(`健康检查：http://localhost:${port}/health`);
+  logger.log(`SiteForge 后端已启动: http://localhost:${port}`);
+  logger.log(`健康检查: http://localhost:${port}/health`);
 }
 
 bootstrap().catch((err) => {
