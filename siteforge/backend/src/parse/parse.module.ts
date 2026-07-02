@@ -1,4 +1,5 @@
 import { Module, Controller, Post, Body } from '@nestjs/common'
+import { Public } from '../common/decorators/public.decorator'
 
 function mockParse(url: string) {
   let domain = 'example.com'
@@ -76,6 +77,7 @@ function mockParse(url: string) {
 
 @Controller('parse')
 class ParseController {
+  @Public()
   @Post()
   parse(@Body() body: { url: string }) {
     if (!body?.url) return { error: '请提供 URL' }
